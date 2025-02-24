@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Seguimiento de Ubicación</title>
+        <!-- Incluir Leaflet CSS y JS (biblioteca para mapas interactivos) -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+        <style>
+            html{
+                height: 100svh;
+                overflow: hidden;
+            }
+            body {
+                font-family:monospace;
+                width: 100vw;
+                height: 100svh;
+                margin: 0px;
+                padding: 0px;
+                text-align: center;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+            .titulo {
+                text-align: center;
+                background-color: #ffffff;
+                margin: 0;
+                z-index: 1000;
+                padding: 5px;
+                font-size: 16px;
+            }
+            .autor {
+                font-size: xx-small;
+            }
+            button {
+                background-color: #d1d1d1;
+                border: none;
+                color: black;
+                padding: 8px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                cursor: pointer;
+                font-family:monospace;
+            }
+            button:disabled {
+                background-color: #ffffff;
+                color: #d1d1d1;
+                cursor: not-allowed;
+            }
+            #clearBtn {
+                background-color: #ffffff;
+            }
+            #downloadBtn {
+                background-color: #ffffff;
+            }
+            .controls {
+                position: absolute;
+                bottom: 30px;
+                left: 50%;
+                translate: -50%;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                z-index: 1000;
+                width: 90vw;
+                max-width: 400px;
+                overflow: hidden;
+                gap: 2px;
+            }
+            #status {
+                grid-column: 1 /3;
+                background-color: #ffffff;
+                padding: 4px;
+            }
+            .intervalo{
+                display: flex;
+                align-items: center;
+                background-color: #ffffff;
+            }
+            .instrucciones{
+                background-color: #ffffff;
+                padding: 4px;
+                font-size: smaller;
+            }
+            #intervalInput {
+                margin-right: 10px;
+                text-align: center;
+                padding: 0;
+            }
+            .container {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+            .panel {
+                position: absolute;
+                top: 115px;
+                right: 10px;
+                z-index: 1000;
+                font-size: xx-small;
+                pointer-events: none;
+            }
+            #map {
+                width: 100%;
+                flex: 1;
+                background-color: #f0f0f0;
+                margin: 0px;
+            }
+            #coordinates {
+                height: 300px;
+                overflow-y: auto;
+                text-align: left;
+                pointer-events: none;
+            }
+            .coordinate-entry {
+                margin-bottom: 5px;
+                padding: 5px;
+                background-color: #f9f9f900;
+                pointer-events: none;
+            }
+            .error {
+                color: red;
+            }
+            .legend {
+                padding: 5px;
+                background: #ffffff;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            .legend div {
+                display: flex;
+                gap: 6px;
+                align-items: center;
+                font-size: smaller;
+            }
+            .legend i {
+                width: 14px;
+                height: 14px;
+                float: left;
+                border-radius: 50%;
+            }
+            p {
+                margin: 0;
+                padding: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <h1 class="titulo">geoTrakeo <span class="autor">by ei</span></h1>
+
+        <div id="map"></div>
+
+        <div class="controls">
+            <div id="status"></div>
+
+            <p class="instrucciones">Configura el intervalo y haz clic en iniciar para recopilar coordenadas.</p>
+            <div class="intervalo">
+                <label for="intervalInput">Intervalo (seg): </label>
+                <input type="number" id="intervalInput" min="1" max="120" value="20" />
+            </div>
+
+            <button id="startBtn">Iniciar seguimiento</button>
+            <button id="stopBtn" disabled>Detener seguimiento</button>
+
+            <button id="clearBtn">Borrar registros</button>
+            <button id="downloadBtn">Descargar recorrido</button>
+        </div>
+
+        <div class="panel">
+            <div id="coordinates">
+                <p>Las coordenadas se mostrarán aquí...</p>
+            </div>
+        </div>
+
+        <!-- Incluir Leaflet JS -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+        <script>
+            // Elementos del DOM
+            const startBtn = document.getElementById("startBtn");
+            const stopBtn = document.getElementById("stopBtn");
+            const clearBtn = document.getElementById("clearBtn");
+            const downloadBtn = document.getElementById("downloadBtn");
+            const intervalInput = document.getElementById("intervalInput");
+            const status = document.getElementById("status");
+            const coordinates = document.getElementById("coordinates");
+
+            // Variables de control
+            let trackingInterval;
+            let entriesCount = 0;
+            let coordinatesData = [];
+
+            // Nombre del almacenamiento para guardar datos
+            const STORAGE_KEY = "geoTrackerData";
+
+            // Inicializar el mapa de Leaflet
+            let map = L.map("map").setView([0, 0], 2);
+            let routeLine = L.polyline([], { color: "#292929", weight: 4 });
+            let markersLayer = L.layerGroup();
+            let firstLoad = true;
+
+            // Añadir la capa de OpenStreetMap
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            }).addTo(map);
+
+            // Crear leyenda
+            let legend = L.control({ position: "topright" });
+            legend.onAdd = function (map) {
+                let div = L.DomUtil.create("div", "legend");
+                div.innerHTML = `
+                <div><i style="background: #858585"></i> Puntos anteriores<br></div>
+                <div><i style="background: #292929"></i> Punto actual<br></div>
+                <div><i style="background: #292929; height: 4px; width: 14px; border-radius: 0"></i> Recorrido</div>
+            `;
+                return div;
+            };
+            legend.addTo(map);
+
+            // Cargar datos guardados al iniciar
+            window.onload = function () {
+                loadSavedData();
+                updateMap();
+            };
+
+            // Función para obtener la ubicación actual
+            function getCurrentPosition() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        // Si se obtiene correctamente
+                        (position) => {
+                            const latitude = position.coords.latitude;
+                            const longitude = position.coords.longitude;
+                            const timestamp = new Date();
+
+                            // Guardar datos para GeoJSON
+                            const pointData = {
+                                id: ++entriesCount,
+                                timestamp: timestamp.toISOString(),
+                                coords: {
+                                    latitude: latitude,
+                                    longitude: longitude,
+                                },
+                            };
+                            coordinatesData.push(pointData);
+
+                            // Crear entrada de coordenadas
+                            const entry = document.createElement("div");
+                            entry.className = "coordinate-entry";
+                            entry.innerHTML = `
+                            <strong>${entriesCount}. ${timestamp.toLocaleTimeString()}</strong><br>
+                            Lat: ${latitude}<br>
+                            Long: ${longitude}
+                        `;
+
+                            // Si hay contenido inicial y es el primer elemento, eliminarlo
+                            if (entriesCount === 1 && coordinates.firstChild.tagName === "P") {
+                                coordinates.innerHTML = "";
+                            }
+
+                            // Agregar la nueva entrada al principio
+                            coordinates.insertBefore(entry, coordinates.firstChild);
+
+                            // Actualizar el mapa con las nuevas coordenadas
+                            updateMap();
+
+                            // Guardar datos en almacenamiento local
+                            saveData();
+                        },
+                        // Si hay un error
+                        (error) => {
+                            const errorMsg = document.createElement("div");
+                            errorMsg.className = "error";
+
+                            switch (error.code) {
+                                case error.PERMISSION_DENIED:
+                                    errorMsg.textContent = "Usuario denegó la solicitud de geolocalización.";
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    errorMsg.textContent = "Información de ubicación no disponible.";
+                                    break;
+                                case error.TIMEOUT:
+                                    errorMsg.textContent = "Tiempo de espera agotado para obtener ubicación.";
+                                    break;
+                                case error.UNKNOWN_ERROR:
+                                    errorMsg.textContent = "Error desconocido.";
+                                    break;
+                            }
+
+                            status.innerHTML = "";
+                            status.appendChild(errorMsg);
+                            stopTracking();
+                        }
+                    );
+                } else {
+                    status.innerHTML = "<div class='error'>La geolocalización no es compatible con este navegador.</div>";
+                    stopTracking();
+                }
+            }
+
+            // Función para iniciar el seguimiento
+            function startTracking() {
+                // Comprobar si el navegador soporta geolocalización
+                if (!navigator.geolocation) {
+                    status.innerHTML = "<div class='error'>La geolocalización no es compatible con este navegador.</div>";
+                    return;
+                }
+
+                // Obtener intervalo de actualización
+                const interval = parseInt(intervalInput.value) || 1;
+                if (interval < 1 || interval > 60) {
+                    status.innerHTML = "<div class='error'>El intervalo debe estar entre 1 y 60 segundos.</div>";
+                    return;
+                }
+
+                // Cambiar estado de botones
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                intervalInput.disabled = true;
+
+                // Mostrar mensaje de estado
+                status.innerHTML = `<p>Seguimiento activo (cada ${interval} segundos)...</p>`;
+
+                // Obtener posición inicial
+                getCurrentPosition();
+
+                // Configurar intervalo para obtener posición
+                trackingInterval = setInterval(getCurrentPosition, interval * 1000);
+            }
+
+            // Función para detener el seguimiento
+            function stopTracking() {
+                // Detener intervalo
+                clearInterval(trackingInterval);
+
+                // Cambiar estado de botones
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                intervalInput.disabled = false;
+
+                // Mostrar mensaje de estado
+                status.innerHTML = "<p>Seguimiento detenido.</p>";
+            }
+
+            // Función para borrar todos los registros
+            function clearData() {
+                coordinates.innerHTML = "<p>Las coordenadas se mostrarán aquí...</p>";
+                entriesCount = 0;
+                coordinatesData = [];
+                saveData();
+                status.innerHTML = "<p>Todos los registros han sido borrados.</p>";
+
+                // Limpiar el mapa
+                markersLayer.clearLayers();
+                routeLine.setLatLngs([]);
+                map.addLayer(routeLine);
+                map.setView([0, 0], 2);
+            }
+
+            // Función para descargar datos en formato GeoJSON
+            function downloadGeoJSON() {
+                if (coordinatesData.length === 0) {
+                    status.innerHTML = "<div class='error'>No hay datos para descargar.</div>";
+                    return;
+                }
+
+                // Crear objeto GeoJSON con la polilínea como elemento principal
+                const geoJSON = {
+                    type: "FeatureCollection",
+                    features: [
+                        // LineString para el recorrido completo (polilínea principal)
+                        {
+                            type: "Feature",
+                            properties: {
+                                name: "Recorrido completo",
+                                description: "Trayecto registrado con aplicación de seguimiento GPS",
+                                startTime: coordinatesData[0].timestamp,
+                                endTime: coordinatesData[coordinatesData.length - 1].timestamp,
+                                pointsCount: coordinatesData.length,
+                            },
+                            geometry: {
+                                type: "LineString",
+                                coordinates: coordinatesData.map((p) => [p.coords.longitude, p.coords.latitude]),
+                            },
+                        },
+                    ],
+                };
+
+                // Crear archivo para descargar
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geoJSON, null, 2));
+                const downloadAnchor = document.createElement("a");
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `geo_tracking_${new Date().toISOString().slice(0, 10)}.geojson`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+
+                status.innerHTML = "<p>Archivo GeoJSON descargado.</p>";
+            }
+
+            // Función para guardar datos en localStorage
+            function saveData() {
+                try {
+                    localStorage.setItem(
+                        STORAGE_KEY,
+                        JSON.stringify({
+                            count: entriesCount,
+                            data: coordinatesData,
+                        })
+                    );
+                } catch (e) {
+                    console.error("Error al guardar datos:", e);
+                    status.innerHTML += "<div class='error'>No se pudieron guardar los datos localmente.</div>";
+                }
+            }
+
+            // Función para cargar datos guardados
+            function loadSavedData() {
+                try {
+                    const savedData = localStorage.getItem(STORAGE_KEY);
+                    if (savedData) {
+                        const parsedData = JSON.parse(savedData);
+                        coordinatesData = parsedData.data || [];
+                        entriesCount = parsedData.count || 0;
+
+                        if (coordinatesData.length > 0) {
+                            // Limpiar el contenedor
+                            coordinates.innerHTML = "";
+
+                            // Mostrar datos guardados
+                            coordinatesData
+                                .slice()
+                                .reverse()
+                                .forEach((point) => {
+                                    const entry = document.createElement("div");
+                                    entry.className = "coordinate-entry";
+                                    const localTime = new Date(point.timestamp).toLocaleTimeString();
+                                    entry.innerHTML = `
+                                <strong>${point.id}. ${localTime}</strong><br>
+                                Lat: ${point.coords.latitude}<br>
+                                Long: ${point.coords.longitude}
+                            `;
+                                    coordinates.appendChild(entry);
+                                });
+
+                            status.innerHTML = `<p>Se cargaron ${coordinatesData.length} registros guardados.</p>`;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error al cargar datos:", e);
+                    status.innerHTML = "<div class='error'>Error al cargar datos guardados.</div>";
+                }
+            }
+
+            // Función para actualizar el mapa
+            function updateMap() {
+                // Limpiar las capas anteriores
+                markersLayer.clearLayers();
+                routeLine.setLatLngs([]);
+
+                if (coordinatesData.length === 0) {
+                    return;
+                }
+
+                // Crear array de puntos para la línea
+                const routePoints = coordinatesData.map((point) => [point.coords.latitude, point.coords.longitude]);
+
+                // Actualizar la línea de ruta
+                routeLine.setLatLngs(routePoints);
+                map.addLayer(routeLine);
+
+                // Añadir marcadores para cada punto
+                coordinatesData.forEach((point, index) => {
+                    // Determinar si es el punto más reciente
+                    const isLatestPoint = index === coordinatesData.length - 1;
+
+                    // Color del marcador basado en si es el último punto o no
+                    const markerColor = isLatestPoint ? "#292929" : "#858585";
+
+                    // Crear marcador con círculo personalizado
+                    const marker = L.circleMarker([point.coords.latitude, point.coords.longitude], {
+                        radius: 8,
+                        fillColor: markerColor,
+                        color: "#000",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8,
+                    });
+
+                    // Añadir información al marcador
+                    const localTime = new Date(point.timestamp).toLocaleTimeString();
+                    marker.bindPopup(`
+                    <strong>Punto #${point.id}</strong><br>
+                    Hora: ${localTime}<br>
+                    Latitud: ${point.coords.latitude}<br>
+                    Longitud: ${point.coords.longitude}<br>
+                    Precisión: ${point.coords.accuracy} metros
+                `);
+
+                    // Añadir etiqueta con el número del punto
+                    marker.bindTooltip(point.id.toString(), {
+                        permanent: true,
+                        direction: "center",
+                        className: "leaflet-tooltip-marker",
+                    });
+
+                    // Añadir el marcador a la capa de marcadores
+                    markersLayer.addLayer(marker);
+                });
+
+                // Añadir capa de marcadores al mapa
+                map.addLayer(markersLayer);
+
+                // Al cargar por primera vez o cuando hay nuevos datos, hacer zoom al recorrido
+                if (firstLoad || coordinatesData.length <= 1) {
+                    // Si solo hay un punto, hacer zoom a ese punto
+                    if (coordinatesData.length === 1) {
+                        const point = coordinatesData[0];
+                        map.setView([point.coords.latitude, point.coords.longitude], 15);
+                    } else {
+                        // Si hay múltiples puntos, ajustar la vista para incluir todos
+                        const bounds = L.latLngBounds(routePoints);
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }
+                    firstLoad = false;
+                } else {
+                    // Para actualizaciones posteriores, centrar en el punto más reciente manteniendo el nivel de zoom
+                    const latestPoint = coordinatesData[coordinatesData.length - 1];
+                    map.panTo([latestPoint.coords.latitude, latestPoint.coords.longitude]);
+                }
+            }
+
+            // Asignar eventos a botones
+            startBtn.addEventListener("click", startTracking);
+            stopBtn.addEventListener("click", stopTracking);
+            clearBtn.addEventListener("click", clearData);
+            downloadBtn.addEventListener("click", downloadGeoJSON);
+
+            // Actualizar tamaño del mapa cuando se redimensione la ventana
+            window.addEventListener("resize", function () {
+                map.invalidateSize();
+            });
+        </script>
+    </body>
+</html>
