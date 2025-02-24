@@ -170,7 +170,6 @@
 
         <div class="panel">
             <div id="coordinates">
-                <p>Las coordenadas se mostrarán aquí...</p>
             </div>
         </div>
 
@@ -317,6 +316,8 @@
                 // Cambiar estado de botones
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
+                clearBtn.disabled = true;
+                downloadBtn.disabled = true;
                 intervalInput.disabled = true;
 
                 // Mostrar mensaje de estado
@@ -337,6 +338,8 @@
                 // Cambiar estado de botones
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
+                clearBtn.disabled = false;
+                downloadBtn.disabled = false;
                 intervalInput.disabled = false;
 
                 // Mostrar mensaje de estado
@@ -345,7 +348,7 @@
 
             // Función para borrar todos los registros
             function clearData() {
-                coordinates.innerHTML = "<p>Las coordenadas se mostrarán aquí...</p>";
+                coordinates.innerHTML = "";
                 entriesCount = 0;
                 coordinatesData = [];
                 saveData();
