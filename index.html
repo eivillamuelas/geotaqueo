@@ -295,10 +295,13 @@
                 try {
                     wakeLock = await navigator.wakeLock.request("screen");
                     wakeLock.addEventListener("release", () => {
+                        console.log("WakeLock fue liberado");
+                        // Intentar adquirirlo nuevamente si seguimos en seguimiento
                         if (isTracking) {
                             requestWakeLock();
                         }
                     });
+                    console.log("WakeLock activado");
                 } catch (err) {
                     console.error(`No se pudo obtener WakeLock: ${err.name}, ${err.message}`);
                 }
@@ -308,6 +311,7 @@
             function handleVisibilityChange() {
                 if (document.visibilityState === "visible" && isTracking) {
                     // La página volvió a ser visible
+                    console.log("Página visible de nuevo, verificando posiciones perdidas");
 
                     const lastCheck = parseInt(localStorage.getItem("trackingLastCheck") || "0");
                     const interval = parseInt(localStorage.getItem("trackingInterval") || "20");
@@ -315,6 +319,7 @@
 
                     // Si han pasado más de dos intervalos desde la última verificación
                     if (now - lastCheck > interval * 2000) {
+                        console.log("Recuperando posición después de inactividad");
                         getCurrentPositionOptimized();
                     }
 
@@ -343,6 +348,7 @@
                                     trackingInterval = setInterval(() => {
                                         self.postMessage({type: 'requestPosition'});
                                     }, interval * 1000);
+                                    console.log('Worker iniciado con intervalo: ' + interval + 's');
                                 } else if (e.data.command === 'stop') {
                                     clearInterval(trackingInterval);
                                     console.log('Worker detenido');
@@ -372,6 +378,7 @@
                             interval: interval,
                         });
 
+                        console.log("Worker de seguimiento iniciado");
                     } catch (err) {
                         console.error("Error al iniciar worker: ", err);
                     }
@@ -391,6 +398,7 @@
             function getCurrentPositionOptimized() {
                 // Si ya está en proceso de obtener posición, no iniciar otra solicitud
                 if (isGettingPosition) {
+                    console.log("Solicitud de posición ignorada: ya hay una en proceso");
                     return;
                 }
 
@@ -398,11 +406,13 @@
                 positionRequestCount++;
 
                 const requestStartTime = performance.now();
+                console.log(`Iniciando solicitud #${positionRequestCount} en: ${new Date().toLocaleTimeString()}`);
 
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             const requestEndTime = performance.now();
+                            console.log(`Solicitud #${positionRequestCount} completada en: ${Math.round(requestEndTime - requestStartTime)}ms`);
 
                             const latitude = position.coords.latitude;
                             const longitude = position.coords.longitude;
@@ -454,9 +464,15 @@
                                 });
 
                                 // Registrar en consola
+                                console.log(`Punto #${entriesCount} añadido. Tiempo de renderizado: ${renderTime}ms`);
+                                console.log(`Distancia desde el punto anterior: ${distanceFromLast.toFixed(2)}m`);
 
-                                
+                                // Mostrar estadísticas cada 5 puntos
+                                if (entriesCount % 5 === 0) {
+                                    logPerformanceStats();
+                                }
                             } else {
+                                console.log("Posición ignorada: es idéntica a la anterior");
                             }
 
                             // Actualizar hora del último check
@@ -655,6 +671,35 @@
                 return R * c; // Distancia en metros
             }
 
+            // 7. Función para mostrar estadísticas de rendimiento
+            function logPerformanceStats() {
+                if (renderTimeLog.length === 0) return;
+
+                // Calcular estadísticas
+                const avgRenderTime = renderTimeLog.reduce((sum, entry) => sum + entry.renderTime, 0) / renderTimeLog.length;
+                const maxRenderTime = Math.max(...renderTimeLog.map((entry) => entry.renderTime));
+
+                console.group("Estadísticas de rendimiento");
+                console.log(`Tiempo medio de renderizado: ${avgRenderTime.toFixed(2)}ms`);
+                console.log(`Tiempo máximo de renderizado: ${maxRenderTime}ms`);
+                console.log(`Total de puntos: ${coordinatesData.length}`);
+                console.log(`Solicitudes de posición: ${positionRequestCount}`);
+
+                // Encontrar puntos problemáticos
+                const slowRenders = renderTimeLog.filter((entry) => entry.renderTime > avgRenderTime * 2);
+                if (slowRenders.length > 0) {
+                    console.log(`Puntos con renderizado lento (>${avgRenderTime * 2}ms):`, slowRenders);
+                }
+
+                console.groupEnd();
+            }
+
+            // 8. Función para limpiar datos antiguos de rendimiento
+            function clearPerformanceData() {
+                renderTimeLog = [];
+                positionRequestCount = 0;
+            }
+
             // 9. Al iniciar seguimiento, usar esta función optimizada
             function startTrackingOptimized() {
                 // Comprobar si el navegador soporta geolocalización
@@ -669,6 +714,9 @@
                     status.innerHTML = "<div class='error'>El intervalo debe estar entre 1 y 120 segundos.</div>";
                     return;
                 }
+
+                // Limpiar datos de rendimiento
+                clearPerformanceData();
 
                 // Cambiar estado de botones
                 startBtn.disabled = true;
@@ -716,10 +764,16 @@
                         localStorage.setItem("trackingLastCheck", Date.now().toString());
                     }
                 });
+
+                // Imprimir información de diagnóstico
+                console.log(`Seguimiento iniciado con intervalo de ${interval}s`);
+                console.log(`Soporte de WakeLock: ${hasWakeLockSupport}`);
+                console.log(`Soporte de Service Worker: ${hasServiceWorkerSupport}`);
             }
 
             // Para implementar estas funciones, reemplaza las llamadas a getCurrentPosition() con
             // getCurrentPositionOptimized() y startTracking() con startTrackingOptimized()
+            
             // Función para detener el seguimiento
             function stopTracking() {
                 // Detener intervalo
@@ -740,6 +794,7 @@
                 if (wakeLock) {
                     wakeLock.release().then(() => {
                         wakeLock = null;
+                        console.log("WakeLock liberado");
                     });
                 }
 
