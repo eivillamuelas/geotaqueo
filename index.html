@@ -983,7 +983,7 @@
                 map.addLayer(markersLayer);
 
                 // Al cargar por primera vez o cuando hay nuevos datos, hacer zoom al recorrido
-                if (firstLoad || coordinatesData.length <= 1) {
+                if (coordinatesData.length <= 1) {
                     // Si solo hay un punto, hacer zoom a ese punto
                     if (coordinatesData.length === 1) {
                         const point = coordinatesData[0];
@@ -993,7 +993,6 @@
                         const bounds = L.latLngBounds(routePoints);
                         map.fitBounds(bounds, { padding: [50, 50] });
                     }
-                    firstLoad = false;
                 } else if (isTracking) {
                     // Para actualizaciones posteriores durante el seguimiento, centrar en el punto más reciente
                     const latestPoint = coordinatesData[coordinatesData.length - 1];
