@@ -3,19 +3,19 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="theme-color" content="#ffffff" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#ffffff">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
         <title>geoTrakeo</title>
         <!-- Incluir Leaflet CSS y JS (biblioteca para mapas interactivos) -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
         <style>
-            html {
+            html{
                 height: 100svh;
                 overflow: hidden;
             }
             body {
-                font-family: monospace;
+                font-family:monospace;
                 width: 100vw;
                 height: 100svh;
                 margin: 0px;
@@ -45,7 +45,7 @@
                 text-decoration: none;
                 display: inline-block;
                 cursor: pointer;
-                font-family: monospace;
+                font-family:monospace;
             }
             button:disabled {
                 background-color: #ffffff;
@@ -76,12 +76,12 @@
                 background-color: #ffffff;
                 padding: 4px;
             }
-            .intervalo {
+            .intervalo{
                 display: flex;
                 align-items: center;
                 background-color: #ffffff;
             }
-            .instrucciones {
+            .instrucciones{
                 background-color: #ffffff;
                 padding: 4px;
                 font-size: smaller;
@@ -160,31 +160,54 @@
                 margin: 0;
                 padding: 0;
             }
-            .background-indicator {
-                display: inline-block;
-                width: 8px;
-                height: 8px;
+            .status-indicator {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                width: 12px;
+                height: 12px;
                 border-radius: 50%;
-                margin-right: 4px;
-                background-color: #4caf50;
+                z-index: 1000;
+                background-color: #4CAF50;
+                box-shadow: 0 0 3px rgba(0,0,0,0.3);
+                cursor: pointer;
             }
-            .background-active {
-                background-color: #4caf50;
+            .status-good {
+                background-color: #4CAF50; /* verde */
             }
-            .background-inactive {
-                background-color: #cccccc;
+            .status-warning {
+                background-color: #FF9800; /* naranja */
+            }
+            .status-error {
+                background-color: #F44336; /* rojo */
+            }
+            .status-info {
+                position: absolute;
+                top: 40px;
+                right: 10px;
+                background-color: black;
+                color: #4CAF50;
+                padding: 10px;
+                font-size: xx-small;
+                z-index: 2000;
+                max-width: 200px;
+                text-align: left;
+                display: none;
             }
         </style>
     </head>
     <body>
         <h1 class="titulo">geoTrakeo <span class="autor">by ei</span></h1>
-
+        
+        <div class="status-indicator"></div>
+        <div class="status-info"></div>
+        
         <div id="map"></div>
 
         <div class="controls">
             <div id="status"></div>
 
-            <p class="instrucciones">Configura el intervalo y haz clic en iniciar para recopilar coordenadas. <span class="background-note"></span></p>
+            <p class="instrucciones">Configura el intervalo y haz clic en iniciar para recopilar coordenadas.</p>
             <div class="intervalo">
                 <label for="intervalInput">Intervalo (seg): </label>
                 <input type="number" id="intervalInput" min="1" max="120" value="20" />
@@ -198,7 +221,8 @@
         </div>
 
         <div class="panel">
-            <div id="coordinates"></div>
+            <div id="coordinates">
+            </div>
         </div>
 
         <!-- Incluir Leaflet JS -->
@@ -212,7 +236,8 @@
             const intervalInput = document.getElementById("intervalInput");
             const status = document.getElementById("status");
             const coordinates = document.getElementById("coordinates");
-            const backgroundNote = document.querySelector(".background-note");
+            const statusIndicator = document.querySelector(".status-indicator");
+            const statusInfo = document.querySelector(".status-info");
 
             // Variables de control
             let trackingInterval;
@@ -221,13 +246,13 @@
             let isTracking = false;
             let trackingWorker = null;
             let lastPositionTime = 0;
-
+            
             // Nombre del almacenamiento para guardar datos
             const STORAGE_KEY = "geoTrackerData";
-
+            
             // Comprobar soporte para APIs necesarias
-            const hasServiceWorkerSupport = "serviceWorker" in navigator;
-            const hasWakeLockSupport = "wakeLock" in navigator;
+            const hasServiceWorkerSupport = 'serviceWorker' in navigator;
+            const hasWakeLockSupport = 'wakeLock' in navigator;
             let wakeLock = null;
 
             // Inicializar el mapa de Leaflet
@@ -258,81 +283,200 @@
             window.onload = function () {
                 loadSavedData();
                 updateMap();
-
+                
                 // Comprobar si hay un seguimiento activo desde una sesión anterior
-                const wasTracking = localStorage.getItem("trackingActive") === "true";
+                const wasTracking = localStorage.getItem('trackingActive') === 'true';
                 if (wasTracking) {
-                    const interval = parseInt(localStorage.getItem("trackingInterval") || "20");
+                    const interval = parseInt(localStorage.getItem('trackingInterval') || '20');
                     intervalInput.value = interval;
-
+                    
                     // Informar al usuario
                     status.innerHTML = "<p>Recuperando seguimiento de sesión anterior...</p>";
-
+                    
                     // Iniciar el seguimiento nuevamente
                     setTimeout(() => {
-                        startTrackingOptimized();
+                        startTracking();
                     }, 1000);
                 }
-
-                // Mostrar información sobre seguimiento en segundo plano
-                updateBackgroundStatus();
+                
+                // Inicializar indicador de estado
+                updateTrackingStatus('good');
             };
 
-            // Actualizar indicador de seguimiento en segundo plano
-            function updateBackgroundStatus() {
-                const hasBackgroundSupport = hasWakeLockSupport || hasServiceWorkerSupport;
-                backgroundNote.innerHTML = hasBackgroundSupport
-                    ? '<span class="background-indicator background-active"></span> Seguimiento continuo disponible'
-                    : '<span class="background-indicator background-inactive"></span> Seguimiento limitado';
+            // Actualizar indicador de estado de seguimiento
+            function updateTrackingStatus(status = 'good', message = '') {
+                // Eliminar clases existentes
+                statusIndicator.classList.remove('status-good', 'status-warning', 'status-error');
+                
+                // Determinar mensaje según el estado
+                let statusText = '';
+                
+                // Añadir la clase apropiada según el estado
+                if (status === 'good') {
+                    statusIndicator.classList.add('status-good');
+                    statusText = message || 'Seguimiento funcionando correctamente';
+                } else if (status === 'warning') {
+                    statusIndicator.classList.add('status-warning');
+                    statusText = message || 'Seguimiento funcionando con dificultades';
+                } else if (status === 'error') {
+                    statusIndicator.classList.add('status-error');
+                    statusText = message || 'Error en el seguimiento';
+                }
+                
+                // Actualizar contenido del div de información
+                statusInfo.innerHTML = statusText;
+                // Mantener atributo title para navegadores de escritorio
+                statusIndicator.title = statusText;
             }
+            
+            // Manejar clic en el indicador de estado
+            statusIndicator.addEventListener('click', function(e) {
+                e.stopPropagation(); // Evitar que el clic llegue al mapa
+                statusInfo.style.display = statusInfo.style.display === 'block' ? 'none' : 'block';
+            });
+            
+            // Cerrar el panel informativo al hacer clic en cualquier otra parte
+            document.addEventListener('click', function(e) {
+                if (e.target !== statusIndicator && e.target !== statusInfo) {
+                    statusInfo.style.display = 'none';
+                }
+            });
 
             // Función para obtener la ubicación actual
+            function getCurrentPosition() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        // Si se obtiene correctamente
+                        (position) => {
+                            const latitude = position.coords.latitude;
+                            const longitude = position.coords.longitude;
+                            const accuracy = position.coords.accuracy || 0;
+                            const timestamp = new Date();
+                            
+                            // Actualizar la hora de última posición
+                            lastPositionTime = Date.now();
+                            localStorage.setItem('trackingLastCheck', lastPositionTime.toString());
+
+                            // Guardar datos para GeoJSON
+                            const pointData = {
+                                id: ++entriesCount,
+                                timestamp: timestamp.toISOString(),
+                                coords: {
+                                    latitude: latitude,
+                                    longitude: longitude,
+                                    accuracy: accuracy
+                                }
+                            };
+                            coordinatesData.push(pointData);
+
+                            // Crear entrada de coordenadas
+                            const entry = document.createElement("div");
+                            entry.className = "coordinate-entry";
+                            entry.innerHTML = `
+                            <strong>${entriesCount}. ${timestamp.toLocaleTimeString()}</strong><br>
+                            Lat: ${latitude}<br>
+                            Long: ${longitude}
+                        `;
+
+                            // Si hay contenido inicial y es el primer elemento, eliminarlo
+                            if (entriesCount === 1 && coordinates.firstChild && coordinates.firstChild.tagName === "P") {
+                                coordinates.innerHTML = "";
+                            }
+
+                            // Agregar la nueva entrada al principio
+                            coordinates.insertBefore(entry, coordinates.firstChild);
+
+                            // Actualizar el mapa con las nuevas coordenadas
+                            updateMap();
+
+                            // Guardar datos en almacenamiento local
+                            saveData();
+                            
+                            // Actualizar indicador a estado correcto
+                            updateTrackingStatus('good');
+                        },
+                        // Si hay un error
+                        (error) => {
+                            const errorMsg = document.createElement("div");
+                            errorMsg.className = "error";
+
+                            switch (error.code) {
+                                case error.PERMISSION_DENIED:
+                                    errorMsg.textContent = "Usuario denegó la solicitud de geolocalización.";
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    errorMsg.textContent = "Información de ubicación no disponible.";
+                                    break;
+                                case error.TIMEOUT:
+                                    errorMsg.textContent = "Tiempo de espera agotado para obtener ubicación.";
+                                    break;
+                                case error.UNKNOWN_ERROR:
+                                    errorMsg.textContent = "Error desconocido.";
+                                    break;
+                            }
+
+                            status.innerHTML = "";
+                            status.appendChild(errorMsg);
+                            
+                            // Actualizar indicador a estado de error
+                            updateTrackingStatus('error', 'No se pudo obtener la ubicación: ' + errorMsg.textContent);
+                        }
+                    );
+                } else {
+                    status.innerHTML = "<div class='error'>La geolocalización no es compatible con este navegador.</div>";
+                    updateTrackingStatus('error', 'La geolocalización no es compatible con este navegador');
+                    stopTracking();
+                }
+            }
 
             // Función para solicitar WakeLock (mantener pantalla activa)
             async function requestWakeLock() {
                 if (!hasWakeLockSupport) return;
-
+                
                 try {
-                    wakeLock = await navigator.wakeLock.request("screen");
-                    wakeLock.addEventListener("release", () => {
-                        console.log("WakeLock fue liberado");
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', () => {
+                        console.log('WakeLock fue liberado');
                         // Intentar adquirirlo nuevamente si seguimos en seguimiento
                         if (isTracking) {
                             requestWakeLock();
                         }
                     });
-                    console.log("WakeLock activado");
+                    console.log('WakeLock activado');
                 } catch (err) {
                     console.error(`No se pudo obtener WakeLock: ${err.name}, ${err.message}`);
                 }
             }
-
+            
             // Función para manejar cambios de visibilidad de la página
             function handleVisibilityChange() {
-                if (document.visibilityState === "visible" && isTracking) {
+                if (document.visibilityState === 'visible' && isTracking) {
                     // La página volvió a ser visible
-                    console.log("Página visible de nuevo, verificando posiciones perdidas");
-
-                    const lastCheck = parseInt(localStorage.getItem("trackingLastCheck") || "0");
-                    const interval = parseInt(localStorage.getItem("trackingInterval") || "20");
+                    console.log('Página visible de nuevo, verificando posiciones perdidas');
+                    
+                    const lastCheck = parseInt(localStorage.getItem('trackingLastCheck') || '0');
+                    const interval = parseInt(localStorage.getItem('trackingInterval') || '20');
                     const now = Date.now();
-
+                    
                     // Si han pasado más de dos intervalos desde la última verificación
                     if (now - lastCheck > interval * 2000) {
-                        console.log("Recuperando posición después de inactividad");
-                        getCurrentPositionOptimized();
+                        console.log('Recuperando posición después de inactividad');
+                        getCurrentPosition();
+                        
+                        // Mostrar advertencia de posibles problemas
+                        updateTrackingStatus('warning', 'Han pasado ' + Math.round((now - lastCheck)/1000) + 's sin actualizar la posición. Recuperando...');
                     }
-
+                    
                     // Actualizar la hora del último chequeo
-                    localStorage.setItem("trackingLastCheck", now.toString());
-
+                    localStorage.setItem('trackingLastCheck', now.toString());
+                    
                     // Reactivar el WakeLock si es necesario
                     if (hasWakeLockSupport && !wakeLock) {
                         requestWakeLock();
                     }
                 }
             }
-
+            
             // Configurar seguimiento en segundo plano
             function setupBackgroundTracking(interval) {
                 // Verificar si el navegador soporta trabajadores en segundo plano
@@ -356,352 +500,42 @@
                                 }
                             };
                         `;
-
+                        
                         // Crear una URL para el Blob
-                        const workerBlob = new Blob([workerCode], { type: "application/javascript" });
+                        const workerBlob = new Blob([workerCode], {type: 'application/javascript'});
                         const workerUrl = URL.createObjectURL(workerBlob);
-
+                        
                         // Crear el worker
                         trackingWorker = new Worker(workerUrl);
-
+                        
                         // Configurar el listener para mensajes del worker
-                        trackingWorker.onmessage = function (e) {
-                            if (e.data.type === "requestPosition") {
+                        trackingWorker.onmessage = function(e) {
+                            if (e.data.type === 'requestPosition') {
                                 // El worker solicita una actualización de posición
-                                getCurrentPositionOptimized();
+                                getCurrentPosition();
+                            } else if (e.data.type === 'error') {
+                                // Manejar errores reportados por el worker
+                                console.error('Error en worker de seguimiento:', e.data.message);
+                                updateTrackingStatus('warning', 'Error al iniciar el seguimiento en segundo plano: ' + err.message);
                             }
                         };
-
+                        
                         // Iniciar el worker
                         trackingWorker.postMessage({
-                            command: "start",
-                            interval: interval,
+                            command: 'start',
+                            interval: interval
                         });
-
-                        console.log("Worker de seguimiento iniciado");
+                        
+                        console.log('Worker de seguimiento iniciado');
                     } catch (err) {
-                        console.error("Error al iniciar worker: ", err);
+                        console.error('Error al iniciar worker: ', err);
+                        updateTrackingStatus('warning');
                     }
                 }
             }
 
             // Función para iniciar el seguimiento
-            // --- Código para prevenir duplicados y mejorar rendimiento ---
-
-            // 1. Variables para controlar duplicados
-            let lastPosition = null;
-            let isGettingPosition = false;
-            let positionRequestCount = 0;
-            let renderTimeLog = [];
-
-            // 2. Función optimizada para obtener posición
-            function getCurrentPositionOptimized() {
-                // Si ya está en proceso de obtener posición, no iniciar otra solicitud
-                if (isGettingPosition) {
-                    console.log("Solicitud de posición ignorada: ya hay una en proceso");
-                    return;
-                }
-
-                isGettingPosition = true;
-                positionRequestCount++;
-
-                const requestStartTime = performance.now();
-                console.log(`Iniciando solicitud #${positionRequestCount} en: ${new Date().toLocaleTimeString()}`);
-
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const requestEndTime = performance.now();
-                            console.log(`Solicitud #${positionRequestCount} completada en: ${Math.round(requestEndTime - requestStartTime)}ms`);
-
-                            const latitude = position.coords.latitude;
-                            const longitude = position.coords.longitude;
-
-                            // Comprobar si la posición es diferente de la última (con cierta tolerancia)
-                            const isDifferentPosition =
-                                !lastPosition || Math.abs(latitude - lastPosition.lat) > 0.0000001 || Math.abs(longitude - lastPosition.lng) > 0.0000001;
-
-                            if (isDifferentPosition) {
-                                // Registrar el tiempo antes de procesar la posición
-                                const renderStartTime = performance.now();
-
-                                // Guardar esta posición como la última
-                                lastPosition = { lat: latitude, lng: longitude };
-
-                                // Procesar la nueva posición
-                                const timestamp = new Date();
-
-                                // Calcular la distancia desde el punto anterior si existe
-                                let distanceFromLast = 0;
-                                if (coordinatesData.length > 0) {
-                                    const lastPoint = coordinatesData[coordinatesData.length - 1];
-                                    distanceFromLast = calculateDistance(lastPoint.coords.latitude, lastPoint.coords.longitude, latitude, longitude);
-                                }
-
-                                // Guardar datos para GeoJSON
-                                const pointData = {
-                                    id: ++entriesCount,
-                                    timestamp: timestamp.toISOString(),
-                                    coords: {
-                                        latitude: latitude,
-                                        longitude: longitude,
-                                        accuracy: position.coords.accuracy || 0,
-                                    },
-                                    distanceFromLast: distanceFromLast,
-                                };
-                                coordinatesData.push(pointData);
-
-                                // Actualizar UI con optimización
-                                updateUIWithNewPoint(pointData);
-
-                                // Medir tiempo de renderizado
-                                const renderEndTime = performance.now();
-                                const renderTime = Math.round(renderEndTime - renderStartTime);
-                                renderTimeLog.push({
-                                    pointId: entriesCount,
-                                    renderTime: renderTime,
-                                    totalPoints: coordinatesData.length,
-                                });
-
-                                // Registrar en consola
-                                console.log(`Punto #${entriesCount} añadido. Tiempo de renderizado: ${renderTime}ms`);
-                                console.log(`Distancia desde el punto anterior: ${distanceFromLast.toFixed(2)}m`);
-
-                                // Mostrar estadísticas cada 5 puntos
-                                if (entriesCount % 5 === 0) {
-                                    logPerformanceStats();
-                                }
-                            } else {
-                                console.log("Posición ignorada: es idéntica a la anterior");
-                            }
-
-                            // Actualizar hora del último check
-                            lastPositionTime = Date.now();
-                            localStorage.setItem("trackingLastCheck", lastPositionTime.toString());
-
-                            // Guardar datos en almacenamiento local
-                            saveData();
-
-                            // Marcar como completada la solicitud
-                            isGettingPosition = false;
-                        },
-                        (error) => {
-                            console.error(`Error de geolocalización: ${error.code} - ${error.message}`);
-
-                            const errorMsg = document.createElement("div");
-                            errorMsg.className = "error";
-
-                            switch (error.code) {
-                                case error.PERMISSION_DENIED:
-                                    errorMsg.textContent = "Usuario denegó la solicitud de geolocalización.";
-                                    break;
-                                case error.POSITION_UNAVAILABLE:
-                                    errorMsg.textContent = "Información de ubicación no disponible.";
-                                    break;
-                                case error.TIMEOUT:
-                                    errorMsg.textContent = "Tiempo de espera agotado para obtener ubicación.";
-                                    break;
-                                case error.UNKNOWN_ERROR:
-                                    errorMsg.textContent = "Error desconocido.";
-                                    break;
-                            }
-
-                            status.innerHTML = "";
-                            status.appendChild(errorMsg);
-
-                            // Marcar como completada la solicitud
-                            isGettingPosition = false;
-                        },
-                        {
-                            enableHighAccuracy: true,
-                            timeout: 10000,
-                            maximumAge: 0,
-                        }
-                    );
-                } else {
-                    status.innerHTML = "<div class='error'>La geolocalización no es compatible con este navegador.</div>";
-                    isGettingPosition = false;
-                }
-            }
-
-            // 3. Función para optimizar la actualización de UI
-            function updateUIWithNewPoint(pointData) {
-                // Crear entrada para el panel de coordenadas sin recargar todo
-                const entry = document.createElement("div");
-                entry.className = "coordinate-entry";
-                const displayTime = new Date(pointData.timestamp).toLocaleTimeString();
-                entry.innerHTML = `
-        <strong>${pointData.id}. ${displayTime}</strong><br>
-        Lat: ${pointData.coords.latitude}<br>
-        Long: ${pointData.coords.longitude}
-    `;
-
-                // Si hay contenido inicial y es el primer elemento, eliminarlo
-                if (pointData.id === 1 && coordinates.firstChild && coordinates.firstChild.tagName === "P") {
-                    coordinates.innerHTML = "";
-                }
-
-                // Agregar la nueva entrada al principio
-                coordinates.insertBefore(entry, coordinates.firstChild);
-
-                // Limitar entradas visibles para mejorar rendimiento (opcional)
-                const maxEntries = 20;
-                while (coordinates.children.length > maxEntries) {
-                    coordinates.removeChild(coordinates.lastChild);
-                }
-
-                // Actualizar solo lo necesario del mapa
-                updateMapWithNewPoint(pointData);
-            }
-
-            // 4. Función para actualizar el mapa de forma optimizada
-            function updateMapWithNewPoint(newPoint) {
-                // Obtener coordenadas del nuevo punto
-                const latlng = [newPoint.coords.latitude, newPoint.coords.longitude];
-
-                // Añadir el punto a la polilínea sin recrearla completamente
-                routeLine.addLatLng(latlng);
-
-                // Crear y añadir solo el nuevo marcador
-                const marker = L.circleMarker(latlng, {
-                    radius: 8,
-                    fillColor: "#292929", // El último punto siempre es actual
-                    color: "#000",
-                    weight: 1,
-                    opacity: 1,
-                    fillOpacity: 0.8,
-                });
-
-                // Añadir información al marcador
-                const localTime = new Date(newPoint.timestamp).toLocaleTimeString();
-                marker.bindPopup(`
-        <strong>Punto #${newPoint.id}</strong><br>
-        Hora: ${localTime}<br>
-        Latitud: ${newPoint.coords.latitude}<br>
-        Longitud: ${newPoint.coords.longitude}<br>
-        ${newPoint.coords.accuracy ? `Precisión: ${newPoint.coords.accuracy} metros` : ""}
-        ${newPoint.distanceFromLast ? `<br>Distancia: ${newPoint.distanceFromLast.toFixed(2)}m` : ""}
-    `);
-
-                // Añadir etiqueta con el número
-                marker.bindTooltip(newPoint.id.toString(), {
-                    permanent: true,
-                    direction: "right",
-                    offset: [5, -5],
-                    className: "custom-tooltip",
-                });
-
-                // Añadir el marcador actual
-                markersLayer.addLayer(marker);
-
-                // Si hay más de un punto, cambiar el color del punto anterior a gris
-                if (coordinatesData.length > 1) {
-                    // Esto requiere que almacenemos las referencias a los marcadores
-                    // o que los busquemos en la capa. Por simplicidad, vamos a recrear los marcadores.
-                    updatePreviousMarkers();
-                }
-
-                // Si estamos rastreando, centrar en el nuevo punto
-                if (isTracking) {
-                    map.panTo(latlng);
-                }
-            }
-
-            // 5. Actualizar marcadores anteriores
-            function updatePreviousMarkers() {
-                // Si hay demasiados puntos, limitar cuántos se muestran para mejorar rendimiento
-                const maxVisiblePoints = 50; // Ajustar según rendimiento
-                const startIndex = Math.max(0, coordinatesData.length - maxVisiblePoints);
-
-                // Recrear marcadores (no es lo más eficiente, pero funciona con la estructura actual)
-                markersLayer.clearLayers();
-
-                for (let i = startIndex; i < coordinatesData.length; i++) {
-                    const point = coordinatesData[i];
-                    const isLatestPoint = i === coordinatesData.length - 1;
-
-                    // Color del marcador basado en si es el último punto o no
-                    const markerColor = isLatestPoint ? "#292929" : "#858585";
-
-                    // Crear marcador
-                    const marker = L.circleMarker([point.coords.latitude, point.coords.longitude], {
-                        radius: 8,
-                        fillColor: markerColor,
-                        color: "#000",
-                        weight: 1,
-                        opacity: 1,
-                        fillOpacity: 0.8,
-                    });
-
-                    // Añadir información al marcador
-                    const localTime = new Date(point.timestamp).toLocaleTimeString();
-                    marker.bindPopup(`
-            <strong>Punto #${point.id}</strong><br>
-            Hora: ${localTime}<br>
-            Latitud: ${point.coords.latitude}<br>
-            Longitud: ${point.coords.longitude}<br>
-            ${point.coords.accuracy ? `Precisión: ${point.coords.accuracy} metros` : ""}
-            ${point.distanceFromLast ? `<br>Distancia: ${point.distanceFromLast.toFixed(2)}m` : ""}
-        `);
-
-                    // Añadir etiqueta con el número
-                    marker.bindTooltip(point.id.toString(), {
-                        permanent: true,
-                        direction: "right",
-                        offset: [5, -5],
-                        className: "custom-tooltip",
-                    });
-
-                    // Añadir el marcador a la capa
-                    markersLayer.addLayer(marker);
-                }
-            }
-
-            // 6. Función para calcular distancia entre puntos (Haversine)
-            function calculateDistance(lat1, lon1, lat2, lon2) {
-                const R = 6371e3; // Radio de la tierra en metros
-                const φ1 = (lat1 * Math.PI) / 180;
-                const φ2 = (lat2 * Math.PI) / 180;
-                const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-                const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-                const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-                return R * c; // Distancia en metros
-            }
-
-            // 7. Función para mostrar estadísticas de rendimiento
-            function logPerformanceStats() {
-                if (renderTimeLog.length === 0) return;
-
-                // Calcular estadísticas
-                const avgRenderTime = renderTimeLog.reduce((sum, entry) => sum + entry.renderTime, 0) / renderTimeLog.length;
-                const maxRenderTime = Math.max(...renderTimeLog.map((entry) => entry.renderTime));
-
-                console.group("Estadísticas de rendimiento");
-                console.log(`Tiempo medio de renderizado: ${avgRenderTime.toFixed(2)}ms`);
-                console.log(`Tiempo máximo de renderizado: ${maxRenderTime}ms`);
-                console.log(`Total de puntos: ${coordinatesData.length}`);
-                console.log(`Solicitudes de posición: ${positionRequestCount}`);
-
-                // Encontrar puntos problemáticos
-                const slowRenders = renderTimeLog.filter((entry) => entry.renderTime > avgRenderTime * 2);
-                if (slowRenders.length > 0) {
-                    console.log(`Puntos con renderizado lento (>${avgRenderTime * 2}ms):`, slowRenders);
-                }
-
-                console.groupEnd();
-            }
-
-            // 8. Función para limpiar datos antiguos de rendimiento
-            function clearPerformanceData() {
-                renderTimeLog = [];
-                positionRequestCount = 0;
-            }
-
-            // 9. Al iniciar seguimiento, usar esta función optimizada
-            function startTrackingOptimized() {
+            function startTracking() {
                 // Comprobar si el navegador soporta geolocalización
                 if (!navigator.geolocation) {
                     status.innerHTML = "<div class='error'>La geolocalización no es compatible con este navegador.</div>";
@@ -715,9 +549,6 @@
                     return;
                 }
 
-                // Limpiar datos de rendimiento
-                clearPerformanceData();
-
                 // Cambiar estado de botones
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
@@ -728,51 +559,46 @@
 
                 // Mostrar mensaje de estado
                 status.innerHTML = `<p>Seguimiento activo (cada ${interval} segundos)...</p>`;
-
+                
+                // Actualizar indicador de estado
+                updateTrackingStatus('good');
+                
                 // Solicitar WakeLock para mantener la pantalla activa (si está disponible)
                 if (hasWakeLockSupport) {
                     requestWakeLock();
                 }
-
+                
                 // Registrar para notificaciones en segundo plano (si está disponible)
-                if (hasServiceWorkerSupport && "Notification" in window) {
+                if (hasServiceWorkerSupport && 'Notification' in window) {
                     Notification.requestPermission();
                 }
-
-                // Obtener posición inicial con la función optimizada
-                getCurrentPositionOptimized();
-
+                
+                // Obtener posición inicial
+                getCurrentPosition();
+                
                 // Usar localStorage para almacenar la hora de inicio y el intervalo
-                localStorage.setItem("trackingActive", "true");
-                localStorage.setItem("trackingInterval", interval.toString());
-                localStorage.setItem("trackingLastCheck", Date.now().toString());
-
+                localStorage.setItem('trackingActive', 'true');
+                localStorage.setItem('trackingInterval', interval.toString());
+                localStorage.setItem('trackingLastCheck', Date.now().toString());
+                
                 // Crear un worker para seguimiento en segundo plano
                 setupBackgroundTracking(interval);
-
+                
                 // Configurar intervalo para obtener posición (como respaldo)
-                // Asegurarse de que usamos la función optimizada
-                trackingInterval = setInterval(getCurrentPositionOptimized, interval * 1000);
-
+                trackingInterval = setInterval(getCurrentPosition, interval * 1000);
+                
                 // Configurar evento de visibilidad para detectar cuando la página vuelve a estar visible
-                document.addEventListener("visibilitychange", handleVisibilityChange);
-
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+                
                 // Registrar evento para cuando la aplicación se cierra
-                window.addEventListener("beforeunload", function () {
+                window.addEventListener('beforeunload', function() {
                     if (isTracking) {
-                        localStorage.setItem("trackingActive", "true");
-                        localStorage.setItem("trackingLastCheck", Date.now().toString());
+                        localStorage.setItem('trackingActive', 'true');
+                        localStorage.setItem('trackingLastCheck', Date.now().toString());
                     }
                 });
-
-                // Imprimir información de diagnóstico
-                console.log(`Seguimiento iniciado con intervalo de ${interval}s`);
-                console.log(`Soporte de WakeLock: ${hasWakeLockSupport}`);
-                console.log(`Soporte de Service Worker: ${hasServiceWorkerSupport}`);
             }
 
-            // Para implementar estas funciones, reemplaza las llamadas a getCurrentPosition() con
-            // getCurrentPositionOptimized() y startTracking() con startTrackingOptimized()
             // Función para detener el seguimiento
             function stopTracking() {
                 // Detener intervalo
@@ -788,28 +614,32 @@
 
                 // Mostrar mensaje de estado
                 status.innerHTML = "<p>Seguimiento detenido.</p>";
-
+                
+                // Actualizar indicador a estado neutral
+                updateTrackingStatus('good');
+                
                 // Liberar WakeLock si existe
                 if (wakeLock) {
-                    wakeLock.release().then(() => {
-                        wakeLock = null;
-                        console.log("WakeLock liberado");
-                    });
+                    wakeLock.release()
+                        .then(() => {
+                            wakeLock = null;
+                            console.log('WakeLock liberado');
+                        });
                 }
-
+                
                 // Detener el worker si existe
                 if (trackingWorker) {
-                    trackingWorker.postMessage({ command: "stop" });
+                    trackingWorker.postMessage({command: 'stop'});
                     trackingWorker = null;
                 }
-
+                
                 // Eliminar marcadores de seguimiento en localStorage
-                localStorage.removeItem("trackingActive");
-                localStorage.removeItem("trackingInterval");
-                localStorage.removeItem("trackingLastCheck");
-
+                localStorage.removeItem('trackingActive');
+                localStorage.removeItem('trackingInterval');
+                localStorage.removeItem('trackingLastCheck');
+                
                 // Eliminar event listeners
-                document.removeEventListener("visibilitychange", handleVisibilityChange);
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
             }
 
             // Función para borrar todos los registros
@@ -964,6 +794,7 @@
                     Hora: ${localTime}<br>
                     Latitud: ${point.coords.latitude}<br>
                     Longitud: ${point.coords.longitude}<br>
+                    ${point.coords.accuracy ? `Precisión: ${point.coords.accuracy} metros` : ''}
                 `);
 
                     // Añadir etiqueta con el número del punto a la derecha
@@ -986,7 +817,7 @@
                     // Si solo hay un punto, hacer zoom a ese punto
                     if (coordinatesData.length === 1) {
                         const point = coordinatesData[0];
-                        map.setView([point.coords.latitude, point.coords.longitude], 17);
+                        map.setView([point.coords.latitude, point.coords.longitude], 15);
                     } else {
                         // Si hay múltiples puntos, ajustar la vista para incluir todos
                         const bounds = L.latLngBounds(routePoints);
@@ -1001,7 +832,7 @@
             }
 
             // Asignar eventos a botones
-            startBtn.addEventListener("click", startTrackingOptimized);
+            startBtn.addEventListener("click", startTracking);
             stopBtn.addEventListener("click", stopTracking);
             clearBtn.addEventListener("click", clearData);
             downloadBtn.addEventListener("click", downloadGeoJSON);
