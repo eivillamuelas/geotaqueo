@@ -174,56 +174,17 @@
             .background-inactive {
                 background-color: #cccccc;
             }
-            .status-indicator {
-                position: absolute;
-                top: 10px;
-                right: 10px;
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-                z-index: 1000;
-                background-color: #4caf50;
-                box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
-                cursor: pointer;
-            }
-            .status-good {
-                background-color: #4caf50; /* verde */
-            }
-            .status-warning {
-                background-color: #ff9800; /* naranja */
-            }
-            .status-error {
-                background-color: #f44336; /* rojo */
-            }
-            .status-info {
-                position: absolute;
-                top: 30px;
-                right: 10px;
-                background-color: white;
-                padding: 10px;
-                border-radius: 4px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-                font-size: xx-small;
-                z-index: 1000;
-                max-width: 200px;
-                text-align: left;
-                display: none;
-            }
         </style>
     </head>
     <body>
         <h1 class="titulo">geoTrakeo <span class="autor">by ei</span></h1>
-
-        <!-- Añadir estas dos líneas -->
-        <div class="status-indicator"></div>
-        <div class="status-info"></div>
 
         <div id="map"></div>
 
         <div class="controls">
             <div id="status"></div>
 
-            <p class="instrucciones">Configura el intervalo y haz clic en iniciar para recopilar coordenadas.</p>
+            <p class="instrucciones">Configura el intervalo y haz clic en iniciar para recopilar coordenadas. <span class="background-note"></span></p>
             <div class="intervalo">
                 <label for="intervalInput">Intervalo (seg): </label>
                 <input type="number" id="intervalInput" min="1" max="120" value="20" />
@@ -251,8 +212,7 @@
             const intervalInput = document.getElementById("intervalInput");
             const status = document.getElementById("status");
             const coordinates = document.getElementById("coordinates");
-            const statusIndicator = document.querySelector(".status-indicator");
-            const statusInfo = document.querySelector(".status-info");
+            const backgroundNote = document.querySelector(".background-note");
 
             // Variables de control
             let trackingInterval;
@@ -294,50 +254,10 @@
             };
             legend.addTo(map);
 
-            // Actualizar indicador de estado de seguimiento
-            function updateTrackingStatus(status = "good", message = "") {
-                // Eliminar clases existentes
-                statusIndicator.classList.remove("status-good", "status-warning", "status-error");
-
-                // Determinar mensaje según el estado
-                let statusText = "";
-
-                // Añadir la clase apropiada según el estado
-                if (status === "good") {
-                    statusIndicator.classList.add("status-good");
-                    statusText = message || "Seguimiento funcionando correctamente";
-                } else if (status === "warning") {
-                    statusIndicator.classList.add("status-warning");
-                    statusText = message || "Seguimiento funcionando con dificultades";
-                } else if (status === "error") {
-                    statusIndicator.classList.add("status-error");
-                    statusText = message || "Error en el seguimiento";
-                }
-
-                // Actualizar contenido del div de información
-                statusInfo.innerHTML = statusText;
-                // Mantener atributo title para navegadores de escritorio
-                statusIndicator.title = statusText;
-            }
-
-            // Manejar clic en el indicador de estado
-            statusIndicator.addEventListener("click", function (e) {
-                e.stopPropagation(); // Evitar que el clic llegue al mapa
-                statusInfo.style.display = statusInfo.style.display === "block" ? "none" : "block";
-            });
-
-            // Cerrar el panel informativo al hacer clic en cualquier otra parte
-            document.addEventListener("click", function (e) {
-                if (e.target !== statusIndicator && e.target !== statusInfo) {
-                    statusInfo.style.display = "none";
-                }
-            });
-
             // Cargar datos guardados al iniciar y verificar si había un seguimiento activo
             window.onload = function () {
                 loadSavedData();
                 updateMap();
-                updateTrackingStatus("good");
 
                 // Comprobar si hay un seguimiento activo desde una sesión anterior
                 const wasTracking = localStorage.getItem("trackingActive") === "true";
@@ -357,6 +277,14 @@
                 // Mostrar información sobre seguimiento en segundo plano
                 updateBackgroundStatus();
             };
+
+            // Actualizar indicador de seguimiento en segundo plano
+            function updateBackgroundStatus() {
+                const hasBackgroundSupport = hasWakeLockSupport || hasServiceWorkerSupport;
+                backgroundNote.innerHTML = hasBackgroundSupport
+                    ? '<span class="background-indicator background-active"></span> Seguimiento continuo disponible'
+                    : '<span class="background-indicator background-inactive"></span> Seguimiento limitado';
+            }
 
             // Función para obtener la ubicación actual
 
@@ -393,7 +321,6 @@
                     if (now - lastCheck > interval * 2000) {
                         console.log("Recuperando posición después de inactividad");
                         getCurrentPositionOptimized();
-                        updateTrackingStatus("warning", "Han pasado " + Math.round((now - lastCheck) / 1000) + "s sin actualizar la posición. Recuperando...");
                     }
 
                     // Actualizar la hora del último chequeo
@@ -554,7 +481,6 @@
 
                             // Guardar datos en almacenamiento local
                             saveData();
-                            updateTrackingStatus("good");
 
                             // Marcar como completada la solicitud
                             isGettingPosition = false;
@@ -582,7 +508,6 @@
 
                             status.innerHTML = "";
                             status.appendChild(errorMsg);
-                            updateTrackingStatus("error", "No se pudo obtener la ubicación: " + errorMsg.textContent);
 
                             // Marcar como completada la solicitud
                             isGettingPosition = false;
@@ -595,8 +520,6 @@
                     );
                 } else {
                     status.innerHTML = "<div class='error'>La geolocalización no es compatible con este navegador.</div>";
-                    updateTrackingStatus("error", "La geolocalización no es compatible con este navegador");
-                    stopTracking();
                     isGettingPosition = false;
                 }
             }
@@ -805,7 +728,7 @@
 
                 // Mostrar mensaje de estado
                 status.innerHTML = `<p>Seguimiento activo (cada ${interval} segundos)...</p>`;
-                updateTrackingStatus("good");
+
                 // Solicitar WakeLock para mantener la pantalla activa (si está disponible)
                 if (hasWakeLockSupport) {
                     requestWakeLock();
@@ -850,7 +773,7 @@
 
             // Para implementar estas funciones, reemplaza las llamadas a getCurrentPosition() con
             // getCurrentPositionOptimized() y startTracking() con startTrackingOptimized()
-
+            
             // Función para detener el seguimiento
             function stopTracking() {
                 // Detener intervalo
@@ -897,7 +820,7 @@
                 coordinatesData = [];
                 saveData();
                 status.innerHTML = "<p>Todos los registros han sido borrados.</p>";
-                updateTrackingStatus("good");
+
                 // Limpiar el mapa
                 markersLayer.clearLayers();
                 routeLine.setLatLngs([]);
