@@ -160,19 +160,45 @@
                 margin: 0;
                 padding: 0;
             }
-            .background-indicator {
-                display: inline-block;
-                width: 8px;
-                height: 8px;
+            
+            /* Nuevo indicador de estado */
+            #statusIndicator {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                width: 20px;
+                height: 20px;
                 border-radius: 50%;
-                margin-right: 4px;
-                background-color: #4caf50;
-            }
-            .background-active {
-                background-color: #4caf50;
-            }
-            .background-inactive {
                 background-color: #cccccc;
+                cursor: pointer;
+                z-index: 1500;
+                border: 1px solid #000;
+            }
+            
+            .status-green {
+                background-color: #4caf50 !important;
+            }
+            
+            .status-yellow {
+                background-color: #ffeb3b !important;
+            }
+            
+            .status-red {
+                background-color: #f44336 !important;
+            }
+            
+            #statusPanel {
+                position: absolute;
+                top: 35px;
+                right: 10px;
+                background-color: #000000;
+                color: #4caf50;
+                padding: 10px;
+                font-size: 12px;
+                z-index: 2000;
+                width: 250px;
+                text-align: left;
+                display: none;
             }
         </style>
     </head>
@@ -180,11 +206,15 @@
         <h1 class="titulo">geoTrakeo <span class="autor">by ei</span></h1>
 
         <div id="map"></div>
+        
+        <!-- Nuevo indicador de estado -->
+        <div id="statusIndicator"></div>
+        <div id="statusPanel"></div>
 
         <div class="controls">
             <div id="status"></div>
 
-            <p class="instrucciones">Configura el intervalo y haz clic en iniciar para recopilar coordenadas. <span class="background-note"></span></p>
+            <p class="instrucciones">Configura el intervalo y haz clic en iniciar para recopilar coordenadas.</p>
             <div class="intervalo">
                 <label for="intervalInput">Intervalo (seg): </label>
                 <input type="number" id="intervalInput" min="1" max="120" value="20" />
@@ -212,7 +242,8 @@
             const intervalInput = document.getElementById("intervalInput");
             const status = document.getElementById("status");
             const coordinates = document.getElementById("coordinates");
-            const backgroundNote = document.querySelector(".background-note");
+            const statusIndicator = document.getElementById("statusIndicator");
+            const statusPanel = document.getElementById("statusPanel");
 
             // Variables de control
             let trackingInterval;
@@ -240,6 +271,10 @@
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             }).addTo(map);
+            
+            // Añadir capas al mapa desde el inicio
+            map.addLayer(routeLine);
+            map.addLayer(markersLayer);
 
             // Crear leyenda
             let legend = L.control({ position: "topright" });
@@ -253,6 +288,44 @@
                 return div;
             };
             legend.addTo(map);
+
+            // Configuración del nuevo indicador de estado
+            function updateStatusIndicator(state, message) {
+                // Eliminar clases anteriores
+                statusIndicator.classList.remove('status-green', 'status-yellow', 'status-red');
+                
+                // Añadir la clase según el estado
+                switch(state) {
+                    case 'ok':
+                        statusIndicator.classList.add('status-green');
+                        break;
+                    case 'warning':
+                        statusIndicator.classList.add('status-yellow');
+                        break;
+                    case 'error':
+                        statusIndicator.classList.add('status-red');
+                        break;
+                    default:
+                        // Estado neutro
+                        break;
+                }
+                
+                // Actualizar el mensaje del panel
+                if (message) {
+                    statusPanel.innerHTML = message;
+                }
+            }
+            
+            // Evento para mostrar/ocultar panel de estado
+            statusIndicator.addEventListener('click', function(e) {
+                e.stopPropagation();
+                statusPanel.style.display = statusPanel.style.display === 'block' ? 'none' : 'block';
+            });
+            
+            // Evento para ocultar panel al hacer clic en cualquier parte
+            document.addEventListener('click', function() {
+                statusPanel.style.display = 'none';
+            });
 
             // Cargar datos guardados al iniciar y verificar si había un seguimiento activo
             window.onload = function () {
@@ -273,20 +346,50 @@
                         startTrackingOptimized();
                     }, 1000);
                 }
-
-                // Mostrar información sobre seguimiento en segundo plano
-                updateBackgroundStatus();
+                
+                // Comprobar el estado inicial de geolocalización
+                checkGeolocationStatus();
             };
-
-            // Actualizar indicador de seguimiento en segundo plano
-            function updateBackgroundStatus() {
-                const hasBackgroundSupport = hasWakeLockSupport || hasServiceWorkerSupport;
-                backgroundNote.innerHTML = hasBackgroundSupport
-                    ? '<span class="background-indicator background-active"></span> Seguimiento continuo disponible'
-                    : '<span class="background-indicator background-inactive"></span> Seguimiento limitado';
+            
+            // Comprobar estado de geolocalización
+            function checkGeolocationStatus() {
+                if (!navigator.geolocation) {
+                    updateStatusIndicator('error', '<p>Estado de geolocalización: <strong>ERROR</strong></p><p>Tu navegador no soporta geolocalización.</p>');
+                    return;
+                }
+                
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        updateStatusIndicator('ok', '<p>Estado de geolocalización: <strong>OK</strong></p><p>Precisión: ' + 
+                            position.coords.accuracy.toFixed(2) + ' metros</p>' +
+                            '<p>Lat: ' + position.coords.latitude.toFixed(6) + '</p>' +
+                            '<p>Lon: ' + position.coords.longitude.toFixed(6) + '</p>');
+                    },
+                    function(error) {
+                        let errorMsg = "";
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMsg = "Permiso denegado para geolocalización.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMsg = "Información de ubicación no disponible.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMsg = "Tiempo de espera agotado.";
+                                break;
+                            default:
+                                errorMsg = "Error desconocido.";
+                                break;
+                        }
+                        updateStatusIndicator('error', '<p>Estado de geolocalización: <strong>ERROR</strong></p><p>' + errorMsg + '</p>');
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
             }
-
-            // Función para obtener la ubicación actual
 
             // Función para solicitar WakeLock (mantener pantalla activa)
             async function requestWakeLock() {
@@ -295,15 +398,13 @@
                 try {
                     wakeLock = await navigator.wakeLock.request("screen");
                     wakeLock.addEventListener("release", () => {
-                        console.log("WakeLock fue liberado");
                         // Intentar adquirirlo nuevamente si seguimos en seguimiento
                         if (isTracking) {
                             requestWakeLock();
                         }
                     });
-                    console.log("WakeLock activado");
                 } catch (err) {
-                    console.error(`No se pudo obtener WakeLock: ${err.name}, ${err.message}`);
+                    updateStatusIndicator('warning', '<p>Estado de geolocalización: <strong>ADVERTENCIA</strong></p><p>No se pudo mantener la pantalla activa.</p>');
                 }
             }
 
@@ -311,19 +412,16 @@
             function handleVisibilityChange() {
                 if (document.visibilityState === "visible" && isTracking) {
                     // La página volvió a ser visible
-                    console.log("Página visible de nuevo, verificando posiciones perdidas");
-
                     const lastCheck = parseInt(localStorage.getItem("trackingLastCheck") || "0");
                     const interval = parseInt(localStorage.getItem("trackingInterval") || "20");
                     const now = Date.now();
 
                     // Si han pasado más de dos intervalos desde la última verificación
                     if (now - lastCheck > interval * 2000) {
-                        console.log("Recuperando posición después de inactividad");
                         getCurrentPositionOptimized();
                     }
 
-                    // Actualizar la hora del último chequeo
+                    // Actualizar hora del último chequeo
                     localStorage.setItem("trackingLastCheck", now.toString());
 
                     // Reactivar el WakeLock si es necesario
@@ -348,10 +446,8 @@
                                     trackingInterval = setInterval(() => {
                                         self.postMessage({type: 'requestPosition'});
                                     }, interval * 1000);
-                                    console.log('Worker iniciado con intervalo: ' + interval + 's');
                                 } else if (e.data.command === 'stop') {
                                     clearInterval(trackingInterval);
-                                    console.log('Worker detenido');
                                     self.close();
                                 }
                             };
@@ -377,43 +473,28 @@
                             command: "start",
                             interval: interval,
                         });
-
-                        console.log("Worker de seguimiento iniciado");
                     } catch (err) {
-                        console.error("Error al iniciar worker: ", err);
+                        updateStatusIndicator('warning', '<p>Estado de geolocalización: <strong>ADVERTENCIA</strong></p><p>No se pudo iniciar el seguimiento en segundo plano.</p>');
                     }
                 }
             }
 
-            // Función para iniciar el seguimiento
-            // --- Código para prevenir duplicados y mejorar rendimiento ---
-
-            // 1. Variables para controlar duplicados
+            // Variables para controlar duplicados
             let lastPosition = null;
             let isGettingPosition = false;
-            let positionRequestCount = 0;
-            let renderTimeLog = [];
 
-            // 2. Función optimizada para obtener posición
+            // Función optimizada para obtener posición
             function getCurrentPositionOptimized() {
                 // Si ya está en proceso de obtener posición, no iniciar otra solicitud
                 if (isGettingPosition) {
-                    console.log("Solicitud de posición ignorada: ya hay una en proceso");
                     return;
                 }
 
                 isGettingPosition = true;
-                positionRequestCount++;
-
-                const requestStartTime = performance.now();
-                console.log(`Iniciando solicitud #${positionRequestCount} en: ${new Date().toLocaleTimeString()}`);
 
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
-                            const requestEndTime = performance.now();
-                            console.log(`Solicitud #${positionRequestCount} completada en: ${Math.round(requestEndTime - requestStartTime)}ms`);
-
                             const latitude = position.coords.latitude;
                             const longitude = position.coords.longitude;
 
@@ -422,9 +503,6 @@
                                 !lastPosition || Math.abs(latitude - lastPosition.lat) > 0.0000001 || Math.abs(longitude - lastPosition.lng) > 0.0000001;
 
                             if (isDifferentPosition) {
-                                // Registrar el tiempo antes de procesar la posición
-                                const renderStartTime = performance.now();
-
                                 // Guardar esta posición como la última
                                 lastPosition = { lat: latitude, lng: longitude };
 
@@ -453,26 +531,13 @@
 
                                 // Actualizar UI con optimización
                                 updateUIWithNewPoint(pointData);
-
-                                // Medir tiempo de renderizado
-                                const renderEndTime = performance.now();
-                                const renderTime = Math.round(renderEndTime - renderStartTime);
-                                renderTimeLog.push({
-                                    pointId: entriesCount,
-                                    renderTime: renderTime,
-                                    totalPoints: coordinatesData.length,
-                                });
-
-                                // Registrar en consola
-                                console.log(`Punto #${entriesCount} añadido. Tiempo de renderizado: ${renderTime}ms`);
-                                console.log(`Distancia desde el punto anterior: ${distanceFromLast.toFixed(2)}m`);
-
-                                // Mostrar estadísticas cada 5 puntos
-                                if (entriesCount % 5 === 0) {
-                                    logPerformanceStats();
-                                }
-                            } else {
-                                console.log("Posición ignorada: es idéntica a la anterior");
+                                
+                                // Actualizar indicador de estado
+                                updateStatusIndicator('ok', '<p>Estado de geolocalización: <strong>OK</strong></p>' +
+                                    '<p>Último punto: #' + pointData.id + '</p>' +
+                                    '<p>Precisión: ' + position.coords.accuracy.toFixed(2) + ' metros</p>' +
+                                    '<p>Lat: ' + latitude.toFixed(6) + '</p>' +
+                                    '<p>Lon: ' + longitude.toFixed(6) + '</p>');
                             }
 
                             // Actualizar hora del último check
@@ -486,28 +551,31 @@
                             isGettingPosition = false;
                         },
                         (error) => {
-                            console.error(`Error de geolocalización: ${error.code} - ${error.message}`);
-
                             const errorMsg = document.createElement("div");
                             errorMsg.className = "error";
 
+                            let errorMessage = "";
                             switch (error.code) {
                                 case error.PERMISSION_DENIED:
-                                    errorMsg.textContent = "Usuario denegó la solicitud de geolocalización.";
+                                    errorMessage = "Usuario denegó la solicitud de geolocalización.";
                                     break;
                                 case error.POSITION_UNAVAILABLE:
-                                    errorMsg.textContent = "Información de ubicación no disponible.";
+                                    errorMessage = "Información de ubicación no disponible.";
                                     break;
                                 case error.TIMEOUT:
-                                    errorMsg.textContent = "Tiempo de espera agotado para obtener ubicación.";
+                                    errorMessage = "Tiempo de espera agotado para obtener ubicación.";
                                     break;
                                 case error.UNKNOWN_ERROR:
-                                    errorMsg.textContent = "Error desconocido.";
+                                    errorMessage = "Error desconocido.";
                                     break;
                             }
 
+                            errorMsg.textContent = errorMessage;
                             status.innerHTML = "";
                             status.appendChild(errorMsg);
+                            
+                            // Actualizar indicador de estado
+                            updateStatusIndicator('error', '<p>Estado de geolocalización: <strong>ERROR</strong></p><p>' + errorMessage + '</p>');
 
                             // Marcar como completada la solicitud
                             isGettingPosition = false;
@@ -520,11 +588,12 @@
                     );
                 } else {
                     status.innerHTML = "<div class='error'>La geolocalización no es compatible con este navegador.</div>";
+                    updateStatusIndicator('error', '<p>Estado de geolocalización: <strong>ERROR</strong></p><p>Tu navegador no soporta geolocalización.</p>');
                     isGettingPosition = false;
                 }
             }
 
-            // 3. Función para optimizar la actualización de UI
+            // Función para optimizar la actualización de UI
             function updateUIWithNewPoint(pointData) {
                 // Crear entrada para el panel de coordenadas sin recargar todo
                 const entry = document.createElement("div");
@@ -554,7 +623,7 @@
                 updateMapWithNewPoint(pointData);
             }
 
-            // 4. Función para actualizar el mapa de forma optimizada
+            // Función para actualizar el mapa de forma optimizada
             function updateMapWithNewPoint(newPoint) {
                 // Obtener coordenadas del nuevo punto
                 const latlng = [newPoint.coords.latitude, newPoint.coords.longitude];
@@ -607,7 +676,7 @@
                 }
             }
 
-            // 5. Actualizar marcadores anteriores
+            // Actualizar marcadores anteriores
             function updatePreviousMarkers() {
                 // Si hay demasiados puntos, limitar cuántos se muestran para mejorar rendimiento
                 const maxVisiblePoints = 50; // Ajustar según rendimiento
@@ -657,7 +726,7 @@
                 }
             }
 
-            // 6. Función para calcular distancia entre puntos (Haversine)
+            // Función para calcular distancia entre puntos (Haversine)
             function calculateDistance(lat1, lon1, lat2, lon2) {
                 const R = 6371e3; // Radio de la tierra en metros
                 const φ1 = (lat1 * Math.PI) / 180;
@@ -671,40 +740,12 @@
                 return R * c; // Distancia en metros
             }
 
-            // 7. Función para mostrar estadísticas de rendimiento
-            function logPerformanceStats() {
-                if (renderTimeLog.length === 0) return;
-
-                // Calcular estadísticas
-                const avgRenderTime = renderTimeLog.reduce((sum, entry) => sum + entry.renderTime, 0) / renderTimeLog.length;
-                const maxRenderTime = Math.max(...renderTimeLog.map((entry) => entry.renderTime));
-
-                console.group("Estadísticas de rendimiento");
-                console.log(`Tiempo medio de renderizado: ${avgRenderTime.toFixed(2)}ms`);
-                console.log(`Tiempo máximo de renderizado: ${maxRenderTime}ms`);
-                console.log(`Total de puntos: ${coordinatesData.length}`);
-                console.log(`Solicitudes de posición: ${positionRequestCount}`);
-
-                // Encontrar puntos problemáticos
-                const slowRenders = renderTimeLog.filter((entry) => entry.renderTime > avgRenderTime * 2);
-                if (slowRenders.length > 0) {
-                    console.log(`Puntos con renderizado lento (>${avgRenderTime * 2}ms):`, slowRenders);
-                }
-
-                console.groupEnd();
-            }
-
-            // 8. Función para limpiar datos antiguos de rendimiento
-            function clearPerformanceData() {
-                renderTimeLog = [];
-                positionRequestCount = 0;
-            }
-
-            // 9. Al iniciar seguimiento, usar esta función optimizada
+            // Función para iniciar seguimiento
             function startTrackingOptimized() {
                 // Comprobar si el navegador soporta geolocalización
                 if (!navigator.geolocation) {
                     status.innerHTML = "<div class='error'>La geolocalización no es compatible con este navegador.</div>";
+                    updateStatusIndicator('error', '<p>Estado de geolocalización: <strong>ERROR</strong></p><p>Tu navegador no soporta geolocalización.</p>');
                     return;
                 }
 
@@ -715,8 +756,14 @@
                     return;
                 }
 
-                // Limpiar datos de rendimiento
-                clearPerformanceData();
+                // Asegurar que las capas están añadidas al mapa
+                if (!map.hasLayer(routeLine)) {
+                    map.addLayer(routeLine);
+                }
+                
+                if (!map.hasLayer(markersLayer)) {
+                    map.addLayer(markersLayer);
+                }
 
                 // Cambiar estado de botones
                 startBtn.disabled = true;
@@ -739,6 +786,14 @@
                     Notification.requestPermission();
                 }
 
+                // Invalidar tamaño del mapa para asegurar que se renderiza correctamente
+                map.invalidateSize();
+
+                // Si estamos iniciando de nuevo después de borrar datos, reiniciar firstLoad
+                if (coordinatesData.length === 0) {
+                    firstLoad = true;
+                }
+
                 // Obtener posición inicial con la función optimizada
                 getCurrentPositionOptimized();
 
@@ -751,7 +806,6 @@
                 setupBackgroundTracking(interval);
 
                 // Configurar intervalo para obtener posición (como respaldo)
-                // Asegurarse de que usamos la función optimizada
                 trackingInterval = setInterval(getCurrentPositionOptimized, interval * 1000);
 
                 // Configurar evento de visibilidad para detectar cuando la página vuelve a estar visible
@@ -764,15 +818,7 @@
                         localStorage.setItem("trackingLastCheck", Date.now().toString());
                     }
                 });
-
-                // Imprimir información de diagnóstico
-                console.log(`Seguimiento iniciado con intervalo de ${interval}s`);
-                console.log(`Soporte de WakeLock: ${hasWakeLockSupport}`);
-                console.log(`Soporte de Service Worker: ${hasServiceWorkerSupport}`);
             }
-
-            // Para implementar estas funciones, reemplaza las llamadas a getCurrentPosition() con
-            // getCurrentPositionOptimized() y startTracking() con startTrackingOptimized()
             
             // Función para detener el seguimiento
             function stopTracking() {
@@ -789,12 +835,14 @@
 
                 // Mostrar mensaje de estado
                 status.innerHTML = "<p>Seguimiento detenido.</p>";
+                
+                // Actualizar indicador de estado
+                checkGeolocationStatus();
 
                 // Liberar WakeLock si existe
                 if (wakeLock) {
                     wakeLock.release().then(() => {
                         wakeLock = null;
-                        console.log("WakeLock liberado");
                     });
                 }
 
@@ -826,6 +874,12 @@
                 routeLine.setLatLngs([]);
                 map.addLayer(routeLine);
                 map.setView([0, 0], 2);
+                
+                // Reiniciar firstLoad para que se haga zoom al añadir nuevos puntos
+                firstLoad = true;
+                
+                // Actualizar estado
+                checkGeolocationStatus();
             }
 
             // Función para descargar datos en formato GeoJSON
@@ -880,8 +934,8 @@
                         })
                     );
                 } catch (e) {
-                    console.error("Error al guardar datos:", e);
                     status.innerHTML += "<div class='error'>No se pudieron guardar los datos localmente.</div>";
+                    updateStatusIndicator('warning', '<p>Estado de geolocalización: <strong>ADVERTENCIA</strong></p><p>No se pudieron guardar los datos localmente.</p>');
                 }
             }
 
@@ -918,13 +972,22 @@
                         }
                     }
                 } catch (e) {
-                    console.error("Error al cargar datos:", e);
                     status.innerHTML = "<div class='error'>Error al cargar datos guardados.</div>";
+                    updateStatusIndicator('warning', '<p>Estado de geolocalización: <strong>ADVERTENCIA</strong></p><p>Error al cargar datos guardados.</p>');
                 }
             }
 
             // Función para actualizar el mapa
             function updateMap() {
+                // Verificar si las capas están en el mapa
+                if (!map.hasLayer(routeLine)) {
+                    map.addLayer(routeLine);
+                }
+                
+                if (!map.hasLayer(markersLayer)) {
+                    map.addLayer(markersLayer);
+                }
+                
                 // Limpiar las capas anteriores
                 markersLayer.clearLayers();
                 routeLine.setLatLngs([]);
@@ -938,7 +1001,6 @@
 
                 // Actualizar la línea de ruta
                 routeLine.setLatLngs(routePoints);
-                map.addLayer(routeLine);
 
                 // Añadir marcadores para cada punto
                 coordinatesData.forEach((point, index) => {
@@ -965,6 +1027,8 @@
                     Hora: ${localTime}<br>
                     Latitud: ${point.coords.latitude}<br>
                     Longitud: ${point.coords.longitude}<br>
+                    ${point.coords.accuracy ? `Precisión: ${point.coords.accuracy} metros` : ""}
+                    ${point.distanceFromLast ? `<br>Distancia: ${point.distanceFromLast.toFixed(2)}m` : ""}
                 `);
 
                     // Añadir etiqueta con el número del punto a la derecha
@@ -979,26 +1043,36 @@
                     markersLayer.addLayer(marker);
                 });
 
-                // Añadir capa de marcadores al mapa
-                map.addLayer(markersLayer);
-
-                // Al cargar por primera vez o cuando hay nuevos datos, hacer zoom al recorrido
-                if (firstLoad || coordinatesData.length <= 1) {
-                    // Si solo hay un punto, hacer zoom a ese punto
-                    if (coordinatesData.length === 1) {
-                        const point = coordinatesData[0];
-                        map.setView([point.coords.latitude, point.coords.longitude], 17);
-                    } else {
-                        // Si hay múltiples puntos, ajustar la vista para incluir todos
-                        const bounds = L.latLngBounds(routePoints);
-                        map.fitBounds(bounds, { padding: [50, 50] });
+                // Mejorar la lógica de zoom usando setTimeout para asegurar que el mapa está listo
+                setTimeout(() => {
+                    if (firstLoad || coordinatesData.length === 1) {
+                        // Si solo hay un punto, hacer zoom a ese punto
+                        if (coordinatesData.length === 1) {
+                            const point = coordinatesData[0];
+                            map.setView([point.coords.latitude, point.coords.longitude], 17);
+                        } else if (coordinatesData.length > 1) {
+                            // Si hay múltiples puntos, ajustar la vista para incluir todos
+                            const bounds = L.latLngBounds(routePoints);
+                            map.fitBounds(bounds, { padding: [50, 50] });
+                        }
+                        firstLoad = false;
+                    } else if (isTracking) {
+                        // Para actualizaciones durante el seguimiento, centrar en el punto más reciente
+                        // y ajustar el zoom si es necesario
+                        const latestPoint = coordinatesData[coordinatesData.length - 1];
+                        
+                        // Si estamos muy alejados del punto, ajustar el zoom
+                        const currentZoom = map.getZoom();
+                        if (currentZoom < 15) {
+                            map.setView([latestPoint.coords.latitude, latestPoint.coords.longitude], 17);
+                        } else {
+                            map.panTo([latestPoint.coords.latitude, latestPoint.coords.longitude]);
+                        }
                     }
-                    firstLoad = false;
-                } else if (isTracking) {
-                    // Para actualizaciones posteriores durante el seguimiento, centrar en el punto más reciente
-                    const latestPoint = coordinatesData[coordinatesData.length - 1];
-                    map.panTo([latestPoint.coords.latitude, latestPoint.coords.longitude]);
-                }
+                    
+                    // Invalidar tamaño para asegurar que el mapa se renderiza correctamente
+                    map.invalidateSize();
+                }, 100);
             }
 
             // Asignar eventos a botones
