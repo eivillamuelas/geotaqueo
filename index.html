@@ -251,7 +251,6 @@
             const intervalInput = document.getElementById("intervalInput");
             const status = document.getElementById("status");
             const coordinates = document.getElementById("coordinates");
-            const backgroundNote = document.querySelector(".background-note");
             const statusIndicator = document.querySelector(".status-indicator");
             const statusInfo = document.querySelector(".status-info");
 
@@ -358,14 +357,6 @@
                 // Mostrar información sobre seguimiento en segundo plano
                 updateBackgroundStatus();
             };
-
-            // Actualizar indicador de seguimiento en segundo plano
-            function updateBackgroundStatus() {
-                const hasBackgroundSupport = hasWakeLockSupport || hasServiceWorkerSupport;
-                backgroundNote.innerHTML = hasBackgroundSupport
-                    ? '<span class="background-indicator background-active"></span> Seguimiento continuo disponible'
-                    : '<span class="background-indicator background-inactive"></span> Seguimiento limitado';
-            }
 
             // Función para obtener la ubicación actual
 
