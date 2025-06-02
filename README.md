@@ -1,5 +1,5 @@
 # Geotaqueo
-Geotaqueo es un herramienta opensource de cartografia colaborativa que permite a sus usuarios compartir información geolocalizada desde sus teléfonos móviles. Mediante esta plataforma, los usuarios pueden documentar y compartir en tiempo real múltiples dimensiones territoriales, desde vivencias individuales hasta cuestiones colectivas que afectan al entorno local. 
+Geotaqueo es un herramienta de cartografia colaborativa que permite a sus usuarios compartir información geolocalizada desde sus teléfonos móviles. Mediante esta plataforma, los usuarios pueden documentar y compartir en tiempo real múltiples dimensiones territoriales, desde vivencias individuales hasta cuestiones colectivas que afectan al entorno local. 
 
 Acceso a diferentes versiones de la aplicación: 
 
