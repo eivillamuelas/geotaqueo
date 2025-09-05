@@ -9,5 +9,3 @@ Acceso a diferentes versiones de la aplicación:
 
 [sotodelreal.vercel.app](https://geotrakeo.vercel.app/)
 
-[geotrakeo.vercel.app](https://geotrakeo.vercel.app/)
-
