@@ -1,6 +1,8 @@
 # Geotaqueo
 Geotaqueo es un herramienta de cartografia colaborativa que permite a sus usuarios compartir información geolocalizada desde sus teléfonos móviles. Mediante esta plataforma, los usuarios pueden documentar y compartir en tiempo real múltiples dimensiones territoriales, desde vivencias individuales hasta cuestiones colectivas que afectan al entorno local. 
 
+[https://eivillamuelas.github.io/geotaqueo/](https://eivillamuelas.github.io/geotaqueo/)
+
 Acceso a diferentes versiones de la aplicación: 
 
 [balboaobserva.es](https://geotrakeo.vercel.app/)
