@@ -1,10 +1,11 @@
 ---
 import MainLayout from "../layouts/MainLayout.astro";
+const baseUrl = import.meta.env.BASE_URL;
 ---
 
 <MainLayout title="Geotaqueo" classStyle="bg-slate-100">
     <div class="p-10 font-mono">
-        <img src="/Under_construction_graphic.gif" class="mb-5"/>
+        <img src={baseUrl + "Under_construction_graphic.gif"} class="mb-5"/>
         <p class="mb-10 text-xs">File: <a class="text-emerald-600 hover:underline" href="https://commons.wikimedia.org/wiki/File:Under_construction_graphic.gif">Under construction graphic.gif</a> Author: <a class="text-emerald-600 hover:underline" href="https://en.wikipedia.org/wiki/User:I_do_not_exist">I do no exist</a></p>
 
         <h1 class="text-2xl mb-10">Bienvenide a geotaqueo!</h1>
