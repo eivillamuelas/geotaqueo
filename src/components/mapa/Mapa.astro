@@ -9,45 +9,49 @@ import Geoloc from "./Geoloc.astro";
     <div id="map" class="absolute inset-0 z-0"></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-
 <script>
+    // Función para verificar si Leaflet está disponible
+    function esperarLeaflet(callback) {
+        if (typeof L !== "undefined") {
+            callback();
+        } else {
+            setTimeout(() => esperarLeaflet(callback), 100);
+        }
+    }
+
+    // Esperar a que el DOM y Leaflet estén listos
     document.addEventListener("DOMContentLoaded", function () {
-        const mapContainer = document.getElementById("map");
-        if (!mapContainer) return;
+        esperarLeaflet(function () {
+            const mapContainer = document.getElementById("map");
+            if (!mapContainer) {
+                console.error("No se encontró el contenedor del mapa");
+                return;
+            }
 
-        try {
-            let map = L.map("map").setView([0, 0], 2);
+            try {
+                // Crear el mapa
+                let map = L.map("map").setView([40.4168, -3.7038], 6);
 
-            const tileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                maxZoom: 19,
-                attribution:
-                    '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://eivillamuelas.com">eivillamuelas</a>',
-            });
+                // Añadir las tiles
+                const tileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                    maxZoom: 19,
+                    attribution:
+                        '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://eivillamuelas.com">eivillamuelas</a>',
+                });
 
-            tileLayer.addTo(map);
-            window.miMapa = map;
+                tileLayer.addTo(map);
 
-            map.whenReady(function () {
-                window.dispatchEvent(new CustomEvent("mapaListo", { detail: map }));
-            });
-        } catch (error) {
-            console.error("Error al crear el mapa", error);
-        }
-        //Añadir un marcador
-        /*L.marker([40.4168, -3.7038]).addTo(map).bindPopup("Hola").openPopup();*/
+                // Hacer el mapa global para otros componentes
+                window.miMapa = map;
 
-        //Añadir un marcador al pulsar
-        /*var popup = L.popup();
-
-        function onMapClick(e) {
-            popup
-                .setLatLng(e.latlng)
-                .setContent("You clicked the map at " + e.latlng.toString())
-                .openOn(map);
-        }
-
-        map.on("click", onMapClick);
-        */
+                // Evento cuando el mapa está listo
+                map.whenReady(function () {
+                    console.log("Mapa cargado correctamente");
+                    window.dispatchEvent(new CustomEvent("mapaListo", { detail: map }));
+                });
+            } catch (error) {
+                console.error("Error al crear el mapa:", error);
+            }
+        });
     });
 </script>
