@@ -7,99 +7,50 @@ import Geoloc from "./Geoloc.astro";
         <Geoloc />
     </div>
     <div id="map" class="absolute inset-0 z-0"></div>
-    
-    <!-- Debug panel -->
-    <div id="debug-panel" class="absolute top-0 right-0 bg-black text-white p-2 text-xs z-50 max-w-xs">
-        <div>🔧 Debug Panel</div>
-        <div id="debug-status">Iniciando...</div>
-    </div>
 </div>
 
-<script>
-    console.log("🗺️ DEBUG - Script del mapa iniciado");
-    
-    function updateDebug(message) {
-        const debugStatus = document.getElementById('debug-status');
-        if (debugStatus) {
-            debugStatus.innerHTML += '<br>' + message;
-        }
-        console.log("🗺️ DEBUG:", message);
-    }
-    
-    function esperarLeaflet(callback, intentos = 0) {
-        updateDebug(`Intento ${intentos + 1} de cargar Leaflet...`);
-        
-        if (typeof L !== 'undefined') {
-            updateDebug("✅ Leaflet encontrado!");
+<script is:inline>
+    // Función para verificar si Leaflet está disponible
+    function esperarLeaflet(callback) {
+        if (typeof L !== "undefined") {
             callback();
-        } else if (intentos < 50) { // 5 segundos máximo
-            setTimeout(() => esperarLeaflet(callback, intentos + 1), 100);
         } else {
-            updateDebug("❌ Timeout esperando Leaflet");
-            console.error("❌ DEBUG - Leaflet no se pudo cargar después de 5 segundos");
+            setTimeout(() => esperarLeaflet(callback), 100);
         }
     }
 
+    // Esperar a que el DOM y Leaflet estén listos
     document.addEventListener("DOMContentLoaded", function () {
-        updateDebug("DOM cargado, buscando contenedor...");
-        
-        const mapContainer = document.getElementById("map");
-        if (!mapContainer) {
-            updateDebug("❌ No se encontró contenedor #map");
-            console.error("❌ DEBUG - No se encontró el contenedor del mapa");
-            return;
-        }
-        
-        updateDebug("✅ Contenedor encontrado");
-        updateDebug(`Dimensiones: ${mapContainer.offsetWidth}x${mapContainer.offsetHeight}`);
-        
-        esperarLeaflet(function() {
+        esperarLeaflet(function () {
+            const mapContainer = document.getElementById("map");
+            if (!mapContainer) {
+                console.error("No se encontró el contenedor del mapa");
+                return;
+            }
+
             try {
-                updateDebug("Creando mapa...");
-                
                 // Crear el mapa
-                let map = L.map("map", {
-                    center: [40.4168, -3.7038],
-                    zoom: 6,
-                    zoomControl: true
-                });
-                
-                updateDebug("✅ Mapa creado");
+                let map = L.map("map").setView([40.4168, -3.7038], 6);
 
                 // Añadir las tiles
                 const tileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
                     maxZoom: 19,
-                    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://eivillamuelas.com">eivillamuelas</a>',
+                    attribution:
+                        '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://eivillamuelas.com">eivillamuelas</a>',
                 });
 
                 tileLayer.addTo(map);
-                updateDebug("✅ Tiles añadidas");
-                
-                // Hacer el mapa global
+
+                // Hacer el mapa global para otros componentes
                 window.miMapa = map;
-                updateDebug("✅ Mapa disponible globalmente");
 
                 // Evento cuando el mapa está listo
                 map.whenReady(function () {
-                    updateDebug("✅ Mapa completamente listo!");
-                    console.log("✅ DEBUG - Mapa cargado correctamente");
+                    console.log("Mapa cargado correctamente");
                     window.dispatchEvent(new CustomEvent("mapaListo", { detail: map }));
-                    
-                    // Ocultar debug panel después de 5 segundos si todo va bien
-                    setTimeout(() => {
-                        const debugPanel = document.getElementById('debug-panel');
-                        if (debugPanel) debugPanel.style.display = 'none';
-                    }, 5000);
                 });
-                
-                // Evento de error en tiles
-                tileLayer.on('tileerror', function(error) {
-                    updateDebug("❌ Error cargando tile: " + error.tile.src);
-                });
-
             } catch (error) {
-                updateDebug("❌ Error: " + error.message);
-                console.error("❌ DEBUG - Error al crear el mapa:", error);
+                console.error("Error al crear el mapa:", error);
             }
         });
     });
