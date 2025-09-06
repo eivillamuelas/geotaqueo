@@ -1,0 +1,57 @@
+---
+import Geoloc from "./Geoloc.astro";
+---
+
+<div class="relative flex-1">
+    <div class="absolute top-20 left-[10px] z-50 border-2 border-slate-400 rounded">
+        <Geoloc />
+    </div>
+    <div id="map" class="absolute inset-0 z-0"></div>
+</div>
+
+<script>
+    // Función para verificar si Leaflet está disponible
+    function esperarLeaflet(callback) {
+        if (typeof L !== "undefined") {
+            callback();
+        } else {
+            setTimeout(() => esperarLeaflet(callback), 100);
+        }
+    }
+
+    // Esperar a que el DOM y Leaflet estén listos
+    document.addEventListener("DOMContentLoaded", function () {
+        esperarLeaflet(function () {
+            const mapContainer = document.getElementById("map");
+            if (!mapContainer) {
+                console.error("No se encontró el contenedor del mapa");
+                return;
+            }
+
+            try {
+                // Crear el mapa
+                let map = L.map("map").setView([40.4168, -3.7038], 6);
+
+                // Añadir las tiles
+                const tileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                    maxZoom: 19,
+                    attribution:
+                        '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://eivillamuelas.com">eivillamuelas</a>',
+                });
+
+                tileLayer.addTo(map);
+
+                // Hacer el mapa global para otros componentes
+                window.miMapa = map;
+
+                // Evento cuando el mapa está listo
+                map.whenReady(function () {
+                    console.log("Mapa cargado correctamente");
+                    window.dispatchEvent(new CustomEvent("mapaListo", { detail: map }));
+                });
+            } catch (error) {
+                console.error("Error al crear el mapa:", error);
+            }
+        });
+    });
+</script>
