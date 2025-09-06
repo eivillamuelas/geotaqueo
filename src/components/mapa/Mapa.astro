@@ -1,0 +1,53 @@
+---
+import Geoloc from "./Geoloc.astro";
+---
+
+<div class="relative flex-1">
+    <div class="absolute top-20 left-[10px] z-50 border-2 border-slate-400 rounded">
+        <Geoloc />
+    </div>
+    <div id="map" class="absolute inset-0 z-0"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const mapContainer = document.getElementById("map");
+        if (!mapContainer) return;
+
+        try {
+            let map = L.map("map").setView([0, 0], 2);
+
+            const tileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19,
+                attribution:
+                    '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://eivillamuelas.com">eivillamuelas</a>',
+            });
+
+            tileLayer.addTo(map);
+            window.miMapa = map;
+
+            map.whenReady(function () {
+                window.dispatchEvent(new CustomEvent("mapaListo", { detail: map }));
+            });
+        } catch (error) {
+            console.error("Error al crear el mapa", error);
+        }
+        //Añadir un marcador
+        /*L.marker([40.4168, -3.7038]).addTo(map).bindPopup("Hola").openPopup();*/
+
+        //Añadir un marcador al pulsar
+        /*var popup = L.popup();
+
+        function onMapClick(e) {
+            popup
+                .setLatLng(e.latlng)
+                .setContent("You clicked the map at " + e.latlng.toString())
+                .openOn(map);
+        }
+
+        map.on("click", onMapClick);
+        */
+    });
+</script>

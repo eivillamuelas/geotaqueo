@@ -1,0 +1,176 @@
+---
+
+---
+
+<button
+    id="geoloc"
+    class="z-50 bg-white hover:bg-emerald-200 cursor-pointer text-white font-bold w-[30px] h-[30px] aspect-square shadow rounded transition-all"
+>
+    <p id="geolocIcon">📍</p>
+</button>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const boton = document.getElementById("geoloc");
+        const botonIcon = document.getElementById("geolocIcon");
+        let mapaConectado = false;
+
+        // Si no encuentra el botón, salir
+        if (!boton) return;
+
+        // Función para esperar a que el mapa esté disponible (respaldo)
+        function esperarMapa(callback, intentos = 0) {
+            if (window.miMapa && window.miMapa._container) {
+                callback();
+                return;
+            }
+
+            // Reintentar cada 500ms, máximo 10 intentos (5 segundos)
+            if (intentos < 10) {
+                setTimeout(() => esperarMapa(callback, intentos + 1), 500);
+            }
+        }
+
+        // Limpiar eventos previos de geolocalización para evitar duplicados
+        function limpiarEventosAnteriores(map) {
+            map.off("locationfound");
+            map.off("locationerror");
+        }
+
+        // Función principal de geolocalización
+        function activarGeolocalizacion() {
+            // Verificar que el mapa existe y el botón no esté ya procesando
+            if (!window.miMapa || boton.disabled) return;
+
+            const map = window.miMapa;
+            limpiarEventosAnteriores(map);
+
+            // Cambiar estado visual del botón (texto, disabled, animación)
+            const textoOriginal = botonIcon.textContent;
+            botonIcon.textContent = "⚙️";
+            boton.disabled = true;
+            botonIcon.classList.add("animate-spin");
+
+            // Timeout para reintentar con configuración menos estricta después de 8 segundos
+            const timeoutId = setTimeout(() => {
+                botonIcon.textContent = "⚙️";
+                map.locate({
+                    setView: true,
+                    maxZoom: 16,
+                    timeout: 15000,
+                    enableHighAccuracy: false, // Menos preciso pero más rápido
+                    maximumAge: 60000, // Acepta ubicación de hasta 1 minuto
+                });
+            }, 8000);
+
+            // Cuando se encuentra la ubicación exitosamente
+            function onLocationFound(e) {
+                clearTimeout(timeoutId);
+
+                // Limpiar marcadores anteriores de geolocalización
+                map.eachLayer(function (layer) {
+                    if (layer.options && layer.options.isGeoLocation) {
+                        map.removeLayer(layer);
+                    }
+                });
+
+                L.circle(e.latlng, e.accuracy, {
+                    weight: 2,
+                    color: "black",
+                    fillOpacity: 0,
+                    dashArray: "5, 10", // Se actualizará dinámicamente
+                }).addTo(map);
+
+                // Crear círculo pequeño central
+                L.circleMarker(e.latlng, { 
+                    radius: 5, 
+                    weight: 1, 
+                    color: "black", 
+                    fillOpacity: 1.0, 
+                    fillColor: "white" 
+                }).addTo(map);
+
+                // Restaurar botón con estado de éxito
+                botonIcon.textContent = "📍";
+                botonIcon.classList.remove("animate-spin");
+
+                // Volver al estado normal después de 2 segundos
+                setTimeout(() => {
+                    botonIcon.textContent = textoOriginal;
+                    boton.disabled = false;
+                }, 2000);
+
+                limpiarEventosAnteriores(map);
+            }
+
+            // Cuando hay error en la geolocalización
+            function onLocationError(e) {
+                clearTimeout(timeoutId);
+
+                // Personalizar mensaje según el tipo de error
+                let mensaje = "No se pudo obtener tu ubicación. ";
+
+                if (e.message.includes("timeout")) {
+                    mensaje += "Asegúrate de tener GPS activado y estar en un lugar con buena señal.";
+                } else if (e.message.includes("denied")) {
+                    mensaje += "Debes permitir el acceso a tu ubicación en el navegador.";
+                } else {
+                    mensaje += "Verifica tu conexión y permisos de ubicación.";
+                }
+
+                alert(mensaje);
+
+                // Restaurar botón al estado normal
+                botonIcon.textContent = textoOriginal;
+                botonIcon.classList.remove("animate-spin");
+                boton.disabled = false;
+
+                limpiarEventosAnteriores(map);
+            }
+
+            // Configurar los event listeners para la geolocalización
+            map.on("locationfound", onLocationFound);
+            map.on("locationerror", onLocationError);
+
+            // Iniciar la geolocalización con configuración inicial (alta precisión)
+            map.locate({
+                setView: true,
+                maxZoom: 16,
+                timeout: 10000, // 10 segundos timeout
+                enableHighAccuracy: true, // Máxima precisión inicialmente
+                maximumAge: 30000, // Acepta ubicación de hasta 30 segundos
+            });
+        }
+
+        // Conectar el botón con el evento de clic
+        function conectarBoton() {
+            if (mapaConectado) return; // Evitar conexiones duplicadas
+            boton.addEventListener("click", activarGeolocalizacion);
+            mapaConectado = true;
+        }
+
+        // Estrategia de conexión: intentar conectar de múltiples maneras
+
+        // 1. Si el mapa ya está disponible, conectar inmediatamente
+        if (window.miMapa) {
+            conectarBoton();
+        } else {
+            let eventoConectado = false;
+
+            // 2. Escuchar el evento personalizado 'mapaListo' (método preferido)
+            window.addEventListener("mapaListo", function (e) {
+                if (!eventoConectado) {
+                    conectarBoton();
+                    eventoConectado = true;
+                }
+            });
+
+            // 3. Como respaldo, usar polling después de 1 segundo
+            setTimeout(() => {
+                if (!mapaConectado && !eventoConectado) {
+                    esperarMapa(conectarBoton);
+                }
+            }, 1000);
+        }
+    });
+</script>
